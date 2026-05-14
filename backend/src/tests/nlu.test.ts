@@ -41,7 +41,7 @@ const TEST_CASES: TestCase[] = [
       service_type: 'ac_repair',
       area: 'G-13',
       urgency: 'high',
-      min_confidence: 0.85,
+      min_confidence: 85,
     },
   },
   {
@@ -51,7 +51,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'book_service',
       service_type: 'plumber',
       area: 'F-10',
-      min_confidence: 0.9,
+      min_confidence: 90,
     },
   },
   {
@@ -61,7 +61,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'book_service',
       service_type: 'electrician',
       area: 'F-8',
-      min_confidence: 0.85,
+      min_confidence: 85,
     },
   },
   {
@@ -72,7 +72,7 @@ const TEST_CASES: TestCase[] = [
       service_type: 'plumber',
       area: 'G-13',
       urgency: 'high',
-      min_confidence: 0.75,
+      min_confidence: 75,
     },
   },
   {
@@ -82,7 +82,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'book_service',
       service_type: null,
       area: null,
-      min_confidence: 0.0, // Very low expected
+      min_confidence: 0, // Very low expected
     },
   },
   {
@@ -92,7 +92,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'greeting',
       service_type: null,
       area: null,
-      min_confidence: 0.9,
+      min_confidence: 90,
     },
   },
   {
@@ -102,7 +102,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'check_status',
       service_type: null,
       area: null,
-      min_confidence: 0.85,
+      min_confidence: 85,
     },
   },
   {
@@ -112,7 +112,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'book_service',
       service_type: 'tutor',
       area: 'I-8',
-      min_confidence: 0.85,
+      min_confidence: 85,
     },
   },
   {
@@ -122,7 +122,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'book_service',
       service_type: 'carpenter',
       area: 'F-10',
-      min_confidence: 0.85,
+      min_confidence: 85,
     },
   },
   {
@@ -133,7 +133,7 @@ const TEST_CASES: TestCase[] = [
       service_type: 'electrician',
       area: 'G-11',
       urgency: 'emergency',
-      min_confidence: 0.8,
+      min_confidence: 80,
     },
   },
   {
@@ -143,7 +143,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'unclear',
       service_type: null,
       area: null,
-      min_confidence: 0.0,
+      min_confidence: 0,
     },
   },
   {
@@ -153,7 +153,7 @@ const TEST_CASES: TestCase[] = [
       intent: 'cancel_booking',
       service_type: null,
       area: null,
-      min_confidence: 0.8,
+      min_confidence: 80,
     },
   },
 ];
@@ -216,6 +216,14 @@ async function runTests() {
         });
       }
 
+      // Check normalized is a non-empty string
+      checks.push({
+        label: 'Normalized',
+        pass: typeof result.normalized === 'string' && result.normalized.length > 0,
+        got: result.normalized,
+        want: 'non-empty string',
+      });
+
       // Print results
       let allPassed = true;
       for (const c of checks) {
@@ -233,6 +241,10 @@ async function runTests() {
       if (result.entities.complexity_hints.length > 0) {
         console.log(`  🔧 Complexity hints: ${result.entities.complexity_hints.join(', ')}`);
       }
+
+      // Check job_complexity is printed (info only, no assertion needed)
+      console.log(`  ℹ️  Job complexity: ${result.entities.job_complexity}`);
+      console.log(`  ℹ️  Normalized: "${result.normalized}"`);
 
       if (allPassed) {
         passed++;

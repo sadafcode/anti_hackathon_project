@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "251161399989",
+    "project_id": "khidmatbot-app",
+    "storage_bucket": "khidmatbot-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:251161399989:android:4f6712dae183c9408fa4fc",
+        "android_client_info": {
+          "package_name": "com.khidmatbot.anti_hackathon_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBPjK6I3eZjfywUV4gNE8wpa5hCLVjyZq8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

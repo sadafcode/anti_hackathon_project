@@ -1,0 +1,439 @@
+[
+  {
+    "id": "p1",
+    "name": "Ali Hassan",
+    "photo_url": "assets/providers/ali_hassan.jpg",
+    "service_types": [
+      "ac_repair"
+    ],
+    "nic": "4210112345671",
+    "blue_tick": true,
+    "rating": 4.8,
+    "total_reviews": 121,
+    "review_sentiment": "positive",
+    "experience_years": 4,
+    "certifications": [
+      "HVAC Tech"
+    ],
+    "tools_available": [
+      "Gauge Manifold",
+      "Vacuum Pump"
+    ],
+    "area": "G-11",
+    "coordinates": {
+      "lat": 33.673,
+      "lng": 73.013
+    },
+    "hourly_rate": 800,
+    "availability": {
+      "monday": [
+        "09:00",
+        "14:00"
+      ],
+      "tuesday": [
+        "10:00"
+      ],
+      "wednesday": [
+        "09:00",
+        "15:00"
+      ],
+      "thursday": [],
+      "friday": [
+        "14:00"
+      ],
+      "saturday": [
+        "10:00",
+        "16:00"
+      ],
+      "sunday": []
+    },
+    "on_time_score": 92,
+    "cancellation_rate": 2,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "reliability_score": 95,
+    "strikes": 0,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2024-01-15T00:00:00Z"
+  },
+  {
+    "id": "p2",
+    "name": "Tariq Mehmood",
+    "photo_url": "assets/providers/tariq_mehmood.jpg",
+    "service_types": [
+      "electrician"
+    ],
+    "nic": "3520198765432",
+    "blue_tick": true,
+    "rating": 4.48,
+    "total_reviews": 86,
+    "review_sentiment": "mostly_positive",
+    "experience_years": 6,
+    "certifications": [
+      "Certified Electrician"
+    ],
+    "tools_available": [
+      "Multimeter",
+      "Wire Strippers"
+    ],
+    "area": "G-13",
+    "coordinates": {
+      "lat": 33.65,
+      "lng": 72.98
+    },
+    "hourly_rate": 600,
+    "availability": {
+      "monday": [
+        "10:00",
+        "16:00"
+      ],
+      "tuesday": [],
+      "wednesday": [
+        "11:00"
+      ],
+      "thursday": [
+        "09:00",
+        "15:00"
+      ],
+      "friday": [],
+      "saturday": [
+        "12:00"
+      ],
+      "sunday": [
+        "10:00"
+      ]
+    },
+    "on_time_score": 83,
+    "cancellation_rate": 5,
+    "capacity_today": 2,
+    "risk_score": "low",
+    "reliability_score": 88,
+    "strikes": 0,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2023-11-20T00:00:00Z"
+  },
+  {
+    "id": "p3",
+    "name": "Bilal Ahmed",
+    "photo_url": "assets/providers/bilal_ahmed.jpg",
+    "service_types": [
+      "plumber"
+    ],
+    "nic": "6110187654321",
+    "blue_tick": true,
+    "rating": 4.9,
+    "total_reviews": 150,
+    "review_sentiment": "positive",
+    "experience_years": 8,
+    "certifications": [],
+    "tools_available": [
+      "Wrench",
+      "Pipe Cutter"
+    ],
+    "area": "F-10",
+    "coordinates": {
+      "lat": 33.693,
+      "lng": 73.018
+    },
+    "hourly_rate": 700,
+    "availability": {
+      "monday": [
+        "09:00",
+        "10:00",
+        "11:00"
+      ],
+      "tuesday": [
+        "14:00",
+        "15:00"
+      ],
+      "wednesday": [
+        "10:00"
+      ],
+      "thursday": [],
+      "friday": [
+        "11:00"
+      ],
+      "saturday": [],
+      "sunday": [
+        "09:00"
+      ]
+    },
+    "on_time_score": 98,
+    "cancellation_rate": 2,
+    "capacity_today": 4,
+    "risk_score": "low",
+    "reliability_score": 89,
+    "strikes": 0,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2023-05-10T00:00:00Z"
+  },
+  {
+    "id": "p4",
+    "name": "Usman Ali",
+    "photo_url": "assets/providers/usman_ali.jpg",
+    "service_types": [
+      "carpenter"
+    ],
+    "nic": "3520112233445",
+    "blue_tick": true,
+    "rating": 4,
+    "total_reviews": 30,
+    "review_sentiment": "mixed",
+    "experience_years": 2,
+    "certifications": [],
+    "tools_available": [
+      "Drill",
+      "Saw"
+    ],
+    "area": "F-8",
+    "coordinates": {
+      "lat": 33.711,
+      "lng": 73.045
+    },
+    "hourly_rate": 500,
+    "availability": {
+      "monday": [
+        "12:00"
+      ],
+      "tuesday": [
+        "09:00"
+      ],
+      "wednesday": [],
+      "thursday": [
+        "14:00"
+      ],
+      "friday": [],
+      "saturday": [
+        "16:00"
+      ],
+      "sunday": []
+    },
+    "on_time_score": 75,
+    "cancellation_rate": 11,
+    "capacity_today": 1,
+    "risk_score": "medium",
+    "reliability_score": 60,
+    "strikes": 1,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2024-03-05T00:00:00Z"
+  },
+  {
+    "id": "p5",
+    "name": "Sana Malik",
+    "photo_url": "assets/providers/sana_malik.jpg",
+    "service_types": [
+      "tutor"
+    ],
+    "nic": "6110198877665",
+    "blue_tick": true,
+    "rating": 4.7,
+    "total_reviews": 60,
+    "review_sentiment": "positive",
+    "experience_years": 5,
+    "certifications": [
+      "BSc Math"
+    ],
+    "tools_available": [
+      "Whiteboard"
+    ],
+    "area": "I-8",
+    "coordinates": {
+      "lat": 33.668,
+      "lng": 73.076
+    },
+    "hourly_rate": 1000,
+    "availability": {
+      "monday": [
+        "16:00",
+        "17:00"
+      ],
+      "tuesday": [
+        "16:00",
+        "17:00"
+      ],
+      "wednesday": [
+        "16:00",
+        "17:00"
+      ],
+      "thursday": [
+        "16:00",
+        "17:00"
+      ],
+      "friday": [
+        "16:00"
+      ],
+      "saturday": [],
+      "sunday": []
+    },
+    "on_time_score": 95,
+    "cancellation_rate": 0,
+    "capacity_today": 2,
+    "risk_score": "low",
+    "reliability_score": 96,
+    "strikes": 0,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2023-08-12T00:00:00Z"
+  },
+  {
+    "id": "p6",
+    "name": "Aslam Khan",
+    "photo_url": "assets/providers/aslam_khan.jpg",
+    "service_types": [
+      "plumber"
+    ],
+    "nic": "4210187654322",
+    "blue_tick": true,
+    "rating": 3.5,
+    "total_reviews": 110,
+    "review_sentiment": "negative",
+    "experience_years": 4,
+    "certifications": [],
+    "tools_available": [
+      "Basic Plumber Kit"
+    ],
+    "area": "G-13",
+    "coordinates": {
+      "lat": 33.652,
+      "lng": 72.978
+    },
+    "hourly_rate": 450,
+    "availability": {
+      "monday": [],
+      "tuesday": [
+        "11:00"
+      ],
+      "wednesday": [
+        "13:00"
+      ],
+      "thursday": [],
+      "friday": [
+        "09:00"
+      ],
+      "saturday": [],
+      "sunday": [
+        "15:00"
+      ]
+    },
+    "on_time_score": 60,
+    "cancellation_rate": 20,
+    "capacity_today": 2,
+    "risk_score": "medium",
+    "reliability_score": 50,
+    "strikes": 1,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2022-09-01T00:00:00Z"
+  },
+  {
+    "id": "p7",
+    "name": "Kamran Shah",
+    "photo_url": "assets/providers/kamran_shah.jpg",
+    "service_types": [
+      "electrician"
+    ],
+    "nic": "3310145678901",
+    "blue_tick": false,
+    "rating": 4.6,
+    "total_reviews": 210,
+    "review_sentiment": "mostly_positive",
+    "experience_years": 10,
+    "certifications": [
+      "Master Electrician"
+    ],
+    "tools_available": [
+      "Full Toolkit"
+    ],
+    "area": "F-10",
+    "coordinates": {
+      "lat": 33.695,
+      "lng": 73.015
+    },
+    "hourly_rate": 900,
+    "availability": {
+      "monday": [
+        "09:00"
+      ],
+      "tuesday": [
+        "10:00"
+      ],
+      "wednesday": [
+        "11:00"
+      ],
+      "thursday": [
+        "12:00"
+      ],
+      "friday": [
+        "14:00"
+      ],
+      "saturday": [
+        "09:00",
+        "15:00"
+      ],
+      "sunday": []
+    },
+    "on_time_score": 88,
+    "cancellation_rate": 4,
+    "capacity_today": 4,
+    "risk_score": "high",
+    "reliability_score": 90,
+    "strikes": 3,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2023-01-20T00:00:00Z"
+  },
+  {
+    "id": "p8",
+    "name": "Shahid Iqbal",
+    "photo_url": "assets/providers/shahid_iqbal.jpg",
+    "service_types": [
+      "ac_repair"
+    ],
+    "nic": "4220156789012",
+    "blue_tick": false,
+    "rating": 4.2,
+    "total_reviews": 40,
+    "review_sentiment": "mixed",
+    "experience_years": 3,
+    "certifications": [],
+    "tools_available": [
+      "Gauge"
+    ],
+    "area": "G-11",
+    "coordinates": {
+      "lat": 33.675,
+      "lng": 73.011
+    },
+    "hourly_rate": 600,
+    "availability": {
+      "monday": [
+        "15:00"
+      ],
+      "tuesday": [
+        "14:00"
+      ],
+      "wednesday": [],
+      "thursday": [
+        "10:00"
+      ],
+      "friday": [],
+      "saturday": [
+        "11:00"
+      ],
+      "sunday": []
+    },
+    "on_time_score": 80,
+    "cancellation_rate": 8,
+    "capacity_today": 1,
+    "risk_score": "medium",
+    "reliability_score": 75,
+    "strikes": 0,
+    "user_preference_score": 0,
+    "is_mock": true,
+    "registered_at": "2024-02-18T00:00:00Z"
+  }
+]

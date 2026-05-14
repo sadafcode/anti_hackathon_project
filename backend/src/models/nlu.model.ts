@@ -58,14 +58,16 @@ export interface NLUEntities {
   budget: NLUBudget | null;
   complexity_hints: string[];
   additional_details: string | null;
+  job_complexity: 'basic' | 'intermediate' | 'complex' | null;
 }
 
 export interface NLUResult {
-  confidence: number;          // 0.0 to 1.0
+  confidence: number;          // 0–100 integer after scaling
   language_detected: 'urdu' | 'roman_urdu' | 'english' | 'roman_urdu_mixed' | 'urdu_mixed' | 'unknown';
   intent: Intent;
   entities: NLUEntities;
   raw_input: string;
+  normalized: string; // Clean English/Roman Urdu summary of what was understood
   processing_time_ms: number;
   requires_clarification: boolean;
   clarification_question: string | null;

@@ -76,8 +76,8 @@ export class NLUAgent {
 
     return {
       confidence: typeof raw.confidence === 'number'
-        ? Math.max(0, Math.min(1, raw.confidence))
-        : 0.5,
+        ? Math.round(Math.max(0, Math.min(1, raw.confidence)) * 100)
+        : 50,
 
       language_detected: validLanguages.includes(raw.language_detected)
         ? raw.language_detected
@@ -124,9 +124,13 @@ export class NLUAgent {
           : [],
 
         additional_details: raw.entities?.additional_details || null,
+        job_complexity: ['basic', 'intermediate', 'complex'].includes(raw.entities?.job_complexity)
+          ? raw.entities.job_complexity
+          : null,
       },
 
       raw_input: originalMessage,
+      normalized: raw.normalized || 'Unclear request',
       processing_time_ms: Date.now() - startTime,
 
       requires_clarification: raw.confidence < 0.6 || raw.requires_clarification === true,
@@ -169,8 +173,10 @@ export class NLUAgent {
         budget: { sensitivity: 'medium', max_amount: null, raw_text: null },
         complexity_hints: [],
         additional_details: null,
+        job_complexity: null,
       },
       raw_input: message || '',
+      normalized: 'Empty request',
       processing_time_ms: Date.now() - startTime,
       requires_clarification: true,
       clarification_question: 'Kya kaam karwana hai? Apni zaroorat batayein.',
@@ -182,7 +188,7 @@ export class NLUAgent {
    */
   private createFallbackResult(message: string, startTime: number, error: string): NLUResult {
     return {
-      confidence: 0.1,
+      confidence: 10,
       language_detected: 'unknown',
       intent: 'unclear',
       entities: {
@@ -193,8 +199,10 @@ export class NLUAgent {
         budget: { sensitivity: 'medium', max_amount: null, raw_text: null },
         complexity_hints: [],
         additional_details: `Parse error: ${error}`,
+        job_complexity: null,
       },
       raw_input: message,
+      normalized: 'Error parsing request',
       processing_time_ms: Date.now() - startTime,
       requires_clarification: true,
       clarification_question: 'Sorry, samajh nahi aa raha. Dobara batayein kya service chahiye?',
