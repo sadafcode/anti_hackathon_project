@@ -7,6 +7,8 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/provider_card_bubble.dart';
 import '../widgets/reasoning_panel.dart';
 import '../widgets/typing_indicator.dart';
+import 'map_picker_screen.dart';
+import '../services/api_service.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -124,63 +126,67 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToBottom();
 
-    if (_isCompleteRequest(text)) {
-      await _handleServiceRequest(text);
-    } else {
-      await Future.delayed(const Duration(milliseconds: 1500));
-      if (!mounted) return;
+    try {
+      final response = await ApiService.sendMessage(text);
+      final intentStatus = response['intent']['status'];
+      
+      if (intentStatus == 'incomplete') {
+        final followUp = response['intent']['follow_up_question'];
+        setState(() {
+          _isTyping = false;
+          _messages.add(Message.agent(followUp));
+        });
+        _scrollToBottom();
+      } else if (intentStatus == 'complete') {
+        final confirmedIntent = response['intent']['confirmed_intent'];
+        
+        setState(() {
+          _isTyping = false;
+          _messages.add(Message.agent('Samajh gaya. Searching for the best providers...'));
+          _isTyping = true;
+        });
+        _scrollToBottom();
+
+        // Trigger discovery
+        final discoveryResp = await ApiService.discoverProviders(confirmedIntent);
+        
+        if (discoveryResp['status'] == 'no_providers') {
+           setState(() {
+              _isTyping = false;
+              _messages.add(Message.agent(discoveryResp['message'] ?? 'Is area mein abhi koi provider available nahi.'));
+           });
+           _scrollToBottom();
+        } else {
+           // Parse providers
+           final providersJson = discoveryResp['ranked_providers'] as List;
+           final providers = providersJson.map((p) => ProviderModel.fromJson(p)).toList();
+           
+           setState(() {
+              _isTyping = false;
+              _messages.add(Message.reasoning(
+                serviceType: confirmedIntent['service_type'],
+                locationHint: confirmedIntent['location']['area'],
+                topProvider: providers.first,
+              ));
+              _messages.add(Message.providerCard(providers.first));
+           });
+           _scrollToBottom();
+           
+           _currentProviders = providers;
+           _currentProviderIndex = 0;
+           
+           // We need to pass confirmedIntent globally or to the next screen. Let's save it.
+           // Actually ProviderProfileScreen accepts ProviderModel, we might need intent too.
+           // For now, let's just keep it here.
+        }
+      }
+    } catch (e) {
       setState(() {
         _isTyping = false;
-        _messages.add(Message.agent(_getMockReply(text)));
+        _messages.add(Message.agent('Oops! Network error: $e'));
       });
       _scrollToBottom();
     }
-  }
-
-  Future<void> _handleServiceRequest(String text) async {
-    final serviceType = _detectServiceType(text)!;
-    final location = _detectLocation(text);
-    final providers = _cachedProviders.isEmpty
-        ? await FirestoreService.fetchProvidersByService(serviceType)
-        : (_cachedProviders
-            .where((p) => p.serviceTypes.contains(serviceType))
-            .toList()
-          ..sort((a, b) => b.rankScore.compareTo(a.rankScore)));
-
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-
-    if (providers.isEmpty) {
-      setState(() {
-        _isTyping = false;
-        _messages.add(Message.agent(
-          'Is area mein abhi koi provider available nahi.\nKya waitlist mein add karein? Slot khulne par notify karunga.',
-        ));
-      });
-      _scrollToBottom();
-      return;
-    }
-
-    setState(() {
-      _isTyping = false;
-      _messages.add(Message.reasoning(
-        serviceType: serviceType,
-        locationHint: location,
-        topProvider: providers.first,
-      ));
-    });
-    _scrollToBottom();
-
-    await Future.delayed(const Duration(milliseconds: 3500));
-    if (!mounted) return;
-
-    setState(() {
-      _messages.add(Message.providerCard(providers.first));
-    });
-    _scrollToBottom();
-
-    _currentProviders = providers;
-    _currentProviderIndex = 0;
   }
 
   void _showNextProvider() {
@@ -215,6 +221,16 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     });
+  }
+
+  void _openMapPicker() async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const MapPickerScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() => _inputController.text = result);
+    }
   }
 
   void _toggleMic() {
@@ -329,6 +345,8 @@ class _ChatScreenState extends State<ChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
+            _LocationButton(onTap: _openMapPicker),
+            const SizedBox(width: 6),
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -398,6 +416,30 @@ class _MicButton extends StatelessWidget {
           color: isListening ? Colors.white : AppTheme.textGrey,
           size: 20,
         ),
+      ),
+    );
+  }
+}
+
+class _LocationButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _LocationButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppTheme.primaryLight,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+        ),
+        child: const Icon(Icons.location_on_outlined,
+            color: AppTheme.primary, size: 20),
       ),
     );
   }

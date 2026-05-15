@@ -47,8 +47,8 @@
       ],
       "sunday": []
     },
-    "on_time_score": 92,
-    "cancellation_rate": 2,
+    "on_time_score": 42,
+    "cancellation_rate": 7,
     "capacity_today": 3,
     "risk_score": "low",
     "reliability_score": 95,

@@ -1,8 +1,11 @@
 export interface Provider {
   id: string;
   name: string;
+  photo_url?: string;
+  nic?: string;
   service_types: string[];
   area: string;
+  coordinates?: { lat: number; lng: number };
   capacity_today: number;
   risk_score: 'low' | 'medium' | 'high';
   strikes: number;
@@ -11,10 +14,15 @@ export interface Provider {
   experience_years: number;
   total_reviews: number;
   review_sentiment: 'positive' | 'mostly_positive' | 'mixed' | 'negative';
+  certifications?: string[];
+  tools_available?: string[];
   hourly_rate: number;
+  availability?: any;
   cancellation_rate: number;
   user_preference_score: number;
   blue_tick: boolean;
+  is_mock?: boolean;
+  registered_at?: string;
 }
 
 export interface ScoreBreakdown {

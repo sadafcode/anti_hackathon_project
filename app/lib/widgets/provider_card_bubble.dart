@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../screens/provider_profile_screen.dart';
+import '../screens/pricing_screen.dart';
+import '../models/pricing_model.dart';
+import '../services/api_service.dart';
 import 'provider_avatar.dart';
 
 class ProviderCardBubble extends StatefulWidget {
@@ -28,6 +31,46 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
         builder: (_) => ProviderProfileScreen(provider: widget.provider),
       ),
     );
+  }
+
+  bool _isLoadingPricing = false;
+
+  void _openPricing() async {
+    if (_isLoadingPricing) return;
+    setState(() => _isLoadingPricing = true);
+    
+    try {
+      // Mock intent creation for pricing since we don't have the global intent here easily
+      final mockIntent = {
+        'service_type': widget.provider.serviceTypes.isNotEmpty ? widget.provider.serviceTypes.first : 'other',
+        'location': {'area': widget.provider.area, 'city': 'Islamabad'},
+        'datetime': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+        'urgency': 'medium',
+        'budget_sensitive': false,
+        'job_complexity': 'basic'
+      };
+      
+      final providerJson = widget.provider.toJson();
+      final pricingJson = await ApiService.getPricing(providerJson, mockIntent, false);
+      final pricingModel = PricingModel.fromJson(pricingJson);
+
+      if (mounted) {
+        setState(() => _isLoadingPricing = false);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PricingScreen(provider: widget.provider, pricing: pricingModel),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingPricing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading pricing: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -289,7 +332,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
           const SizedBox(width: 10),
           Expanded(
             child: ElevatedButton(
-              onPressed: _openProfile,
+              onPressed: _openPricing,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 shape: RoundedRectangleBorder(

@@ -61,9 +61,9 @@ export class FeedbackAgent {
         const idx = providers.findIndex(p => p.id === providerId);
         if (idx !== -1) {
           providers[idx].cancellation_rate += 1;
-          providers[idx].reliability_score = Math.max(0, providers[idx].reliability_score - 10);
+          providers[idx].on_time_score = Math.max(0, providers[idx].on_time_score - 10);
           fs.writeFileSync(dataPath, JSON.stringify(providers, null, 2));
-          console.log(`   📉 No Show Penalty logged: cancellation_rate=${providers[idx].cancellation_rate}, reliability=${providers[idx].reliability_score}`);
+          console.log(`   📉 No Show Penalty logged: cancellation_rate=${providers[idx].cancellation_rate}, reliability=${providers[idx].on_time_score}`);
         }
       }
     } catch (e) {

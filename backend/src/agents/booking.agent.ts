@@ -30,15 +30,15 @@ export class BookingAgent {
             total_price: pricing.total,
             status: 'conflict_waitlist',
             status_message: 'Time slot unavailable.',
-            waitlist_suggestion: waitlistTime.toISOString()
+            waitlist_suggestion: waitlistTime.toISOString(),
+            provider_id: provider.id
           };
         }
       }
     }
 
-    // 2. Mock 3-second delay
-    console.log(`\n⏳ Sending request to provider ${provider.name}... waiting for response.`);
-    await new Promise(r => setTimeout(r, 3000));
+    // 2. We no longer mock a 3-second delay here because we want to return immediately as 'pending'.
+    console.log(`\n⏳ Sending request to provider ${provider.name}... waiting for provider to respond from their app.`);
 
     // 3. Provider Decline
     if (mock_action === 'decline') {
@@ -50,7 +50,8 @@ export class BookingAgent {
         datetime: intent.datetime,
         total_price: pricing.total,
         status: 'provider_declined',
-        status_message: 'Provider declined the request.'
+        status_message: 'Provider declined the request.',
+        provider_id: provider.id
       };
     }
 
@@ -62,7 +63,7 @@ export class BookingAgent {
       id: booking_id,
       provider_id: provider.id,
       datetime: requestedTime,
-      status: 'confirmed',
+      status: 'pending', // MODIFIED: Start in pending state
       request
     };
     
@@ -78,9 +79,64 @@ export class BookingAgent {
       service: intent.service_type,
       datetime: intent.datetime,
       total_price: pricing.total,
-      status: 'confirmed',
-      status_message: 'Booking confirmed successfully.'
+      status: 'pending',
+      status_message: 'Booking sent to provider. Waiting for acceptance.',
+      provider_id: provider.id
     };
+  }
+
+  public getPendingBookings(providerId: string): BookingRecord[] {
+    const providerBookings = this.bookings.get(providerId) || [];
+    return providerBookings.filter(b => b.status === 'pending');
+  }
+
+  public async respondToBooking(bookingId: string, providerId: string, action: string, reason?: string): Promise<any> {
+    const providerBookings = this.bookings.get(providerId) || [];
+    const booking = providerBookings.find(b => b.id === bookingId);
+
+    if (!booking) {
+      throw new Error('Booking not found');
+    }
+
+    if (booking.status !== 'pending') {
+      throw new Error(`Cannot respond to booking in status: ${booking.status}`);
+    }
+
+    if (action === 'accept') {
+      booking.status = 'confirmed';
+      return { status: 'success', booking_status: 'confirmed' };
+    } else if (action === 'decline') {
+      booking.status = 'provider_declined';
+      console.log(`Provider declined booking. Reason: ${reason}`);
+
+      // Auto-reschedule logic (similar to simulation)
+      const allCandidates = booking.request.all_ranked_providers || [];
+      const nextProvider = allCandidates.find(p => p.id !== providerId);
+
+      if (nextProvider) {
+        console.log(`🔄 Provider declined — finding next provider: ${nextProvider.name}`);
+        const pricingAgent = new PricingAgent();
+        const newPricing = pricingAgent.calculatePrice({
+          provider: nextProvider,
+          intent: booking.request.intent,
+          is_returning_user: booking.request.is_returning_user || false
+        });
+
+        const newRequest: BookingRequest = {
+          ...booking.request,
+          provider: nextProvider,
+          pricing: newPricing,
+          mock_action: undefined 
+        };
+
+        const newBooking = await this.bookService(newRequest);
+        return { status: 'declined', auto_rescheduled: true, new_booking: newBooking };
+      }
+
+      return { status: 'declined', auto_rescheduled: false };
+    } else {
+      throw new Error('Invalid action');
+    }
   }
 
   public async simulateProviderCancellation(bookingId: string): Promise<BookingReceipt | null> {
@@ -146,9 +202,9 @@ export class BookingAgent {
         if (idx !== -1) {
           // IMPORTANT logic: cancellation_rate + 1, reliability_score - 10
           providers[idx].cancellation_rate += 1;
-          providers[idx].reliability_score = Math.max(0, providers[idx].reliability_score - 10);
+          providers[idx].on_time_score = Math.max(0, providers[idx].on_time_score - 10);
           fs.writeFileSync(dataPath, JSON.stringify(providers, null, 2));
-          console.log(`   📉 Logged Penalty. Updated profile: cancellation_rate=${providers[idx].cancellation_rate}, reliability=${providers[idx].reliability_score}`);
+          console.log(`   📉 Logged Penalty. Updated profile: cancellation_rate=${providers[idx].cancellation_rate}, reliability=${providers[idx].on_time_score}`);
         }
       }
     } catch (e) {

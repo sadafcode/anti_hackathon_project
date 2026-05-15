@@ -48,6 +48,58 @@ export class DiscoveryAgent {
     }
   }
 
+  // Mock NADRA Database for verification
+  private readonly nadraDb: Record<string, boolean> = {
+    '4210112345671': true,
+    '3520198765432': true,
+    '6110187654321': true,
+    '3520112233445': true,
+    '6110198877665': true,
+    '4210187654322': true,
+    '3310145678901': false,
+    '4220156789012': false,
+  };
+
+  public async registerProvider(data: any): Promise<any> {
+    const nic = data.nic;
+    const isVerified = nic ? (this.nadraDb[nic] === true) : false;
+
+    const newProvider: Provider = {
+      id: 'PRV-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+      name: data.name,
+      service_types: data.service_types || [],
+      blue_tick: isVerified,
+      rating: 5.0,
+      total_reviews: 0,
+      review_sentiment: 'mixed',
+      experience_years: data.experience_years || 1,
+      area: data.area || 'Islamabad',
+      hourly_rate: data.hourly_rate || 500,
+      on_time_score: 100,
+      cancellation_rate: 0,
+      capacity_today: 3,
+      risk_score: 'low',
+      strikes: 0,
+      is_mock: false,
+      user_preference_score: 0
+    };
+
+    this.providers.push(newProvider);
+
+    try {
+      const dataPath = path.resolve(__dirname, '../../data/providers.json');
+      fs.writeFileSync(dataPath, JSON.stringify(this.providers, null, 2));
+    } catch (e) {
+      console.error('Failed to save provider to JSON:', e);
+    }
+
+    return {
+      status: 'success',
+      provider: newProvider,
+      message: isVerified ? 'Provider registered and NADRA verified.' : 'Provider registered without NADRA verification.'
+    };
+  }
+
   public discover(intent: ConfirmedIntent): DiscoveryAgentOutput {
     // PART A - FILTERING
     const candidates = this.providers.filter(p => {

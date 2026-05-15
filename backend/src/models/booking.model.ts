@@ -2,7 +2,7 @@ import { ConfirmedIntent } from './intent.model';
 import { RankedProvider } from './discovery.model';
 import { PricingAgentOutput } from './pricing.model';
 
-export type BookingStatus = 'confirmed' | 'conflict_waitlist' | 'provider_declined' | 'cancelled_with_penalty';
+export type BookingStatus = 'pending' | 'confirmed' | 'conflict_waitlist' | 'provider_declined' | 'cancelled_with_penalty';
 
 export interface BookingRequest {
   intent: ConfirmedIntent;
@@ -23,6 +23,7 @@ export interface BookingReceipt {
   status_message: string;
   status: BookingStatus;
   waitlist_suggestion?: string;
+  provider_id?: string;
 }
 
 export interface BookingRecord {

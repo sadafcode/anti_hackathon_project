@@ -128,24 +128,25 @@ export class IntentAgent {
 
   private generateFollowUp(field: string, language: string): string {
     const isEnglish = language === 'english';
+    const isUrdu = language === 'urdu';
 
     switch (field) {
       case 'service_type':
-        return isEnglish 
-          ? "What service do you need? (e.g., plumber, electrician, AC repair)"
-          : "Kya service chahiye? (plumber, electrician, AC repair...)";
+        if (isEnglish) return "What service do you need? (e.g., plumber, electrician, AC repair)";
+        if (isUrdu) return "آپ کو کس سروس کی ضرورت ہے؟ (مثلاً پلمبر، الیکٹریشن، اے سی ریپیئر)";
+        return "Kya service chahiye? (plumber, electrician, AC repair...)";
       case 'location.area':
-        return isEnglish
-          ? "Where do you need the service? Please specify the area (e.g., G-13, F-10)."
-          : "Kahan chahiye? Area batayein (G-13, F-10, etc.)";
+        if (isEnglish) return "Where do you need the service? Please specify the area (e.g., G-13, F-10).";
+        if (isUrdu) return "آپ کو سروس کہاں چاہیے؟ براہ کرم علاقہ بتائیں (مثلاً G-13، F-10)";
+        return "Kahan chahiye? Area batayein (G-13, F-10, etc.)";
       case 'preferred_time':
-        return isEnglish
-          ? "When do you need it? Please provide a date and time."
-          : "Kab chahiye? Date aur time batayein";
+        if (isEnglish) return "When do you need it? Please provide a date and time.";
+        if (isUrdu) return "آپ کو سروس کب چاہیے؟ تاریخ اور وقت بتائیں";
+        return "Kab chahiye? Date aur time batayein";
       default:
-        return isEnglish
-          ? "Could you provide more details?"
-          : "Tafseel batayein";
+        if (isEnglish) return "Could you provide more details?";
+        if (isUrdu) return "مزید تفصیل بتائیں";
+        return "Tafseel batayein";
     }
   }
 

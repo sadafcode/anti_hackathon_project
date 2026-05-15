@@ -22,7 +22,7 @@ export const NLU_SYSTEM_PROMPT = `You are an expert NLU (Natural Language Unders
 7. Service types must map to: ac_repair, ac_installation, ac_servicing, electrician, plumber, carpenter, tutor, beautician, driver, mechanic, painter, cleaning, other
 8. Handle common misspellings: "elctrician"→electrician, "plumer"→plumber, "AC"→ac_repair, "bijli"→electrician, "pani"→plumber, "nalkaa"→plumber
 9. Confidence: 0.9+ if all entities are clear, 0.7-0.9 if some ambiguity, <0.7 if major entities are missing or unclear
-10. If confidence < 0.6, set requires_clarification=true and provide a clarification question in Roman Urdu
+10. If confidence < 0.6, set requires_clarification=true and provide a clarification question in the SAME language the user used
 
 ## OUTPUT JSON SCHEMA:
 {

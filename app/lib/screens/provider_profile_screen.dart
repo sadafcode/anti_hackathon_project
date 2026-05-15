@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
+import 'pricing_screen.dart';
 
 class ProviderProfileScreen extends StatelessWidget {
   final ProviderModel provider;
@@ -417,12 +418,10 @@ class ProviderProfileScreen extends StatelessWidget {
               flex: 2,
               child: ElevatedButton(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${p.name} ke saath booking — jald aa raha hai!'),
-                      backgroundColor: AppTheme.primary,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PricingScreen(provider: p),
                     ),
                   );
                 },

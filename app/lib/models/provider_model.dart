@@ -71,6 +71,56 @@ class ProviderModel {
     this.availability = const {},
   });
 
+  factory ProviderModel.fromJson(Map<String, dynamic> json) {
+    return ProviderModel(
+      id: json['id'] ?? '',
+      name: json['name'] ?? 'Unknown',
+      serviceTypes: List<String>.from(json['service_types'] ?? []),
+      blueTick: json['blue_tick'] ?? false,
+      rating: (json['rating'] ?? 0).toDouble(),
+      totalReviews: json['total_reviews'] ?? 0,
+      reviewSentiment: json['review_sentiment'] ?? 'neutral',
+      experienceYears: json['experience_years'] ?? 0,
+      certifications: [],
+      toolsAvailable: [],
+      area: json['area'] ?? '',
+      hourlyRate: (json['hourly_rate'] ?? 0).toDouble(),
+      onTimeScore: json['on_time_score'] ?? 0,
+      cancellationRate: json['cancellation_rate'] ?? 0,
+      capacityToday: json['capacity_today'] ?? 0,
+      riskScore: json['risk_score'] ?? 'low',
+      strikes: json['strikes'] ?? 0,
+      isMock: false,
+      distanceKm: 2.0, // Mock distance
+      rankScore: json['calculated_score'] ?? 0,
+      rankReason: json['ranking_reason'] ?? '',
+      recentReviews: [],
+      colorIndex: 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'service_types': serviceTypes,
+      'blue_tick': blueTick,
+      'rating': rating,
+      'total_reviews': totalReviews,
+      'review_sentiment': reviewSentiment,
+      'experience_years': experienceYears,
+      'area': area,
+      'hourly_rate': hourlyRate,
+      'on_time_score': onTimeScore,
+      'cancellation_rate': cancellationRate,
+      'capacity_today': capacityToday,
+      'risk_score': riskScore,
+      'strikes': strikes,
+      'calculated_score': rankScore,
+      'ranking_reason': rankReason,
+    };
+  }
+
   String get initials => name.split(' ').map((w) => w[0]).take(2).join();
   String get displayPrice => 'Rs. ${hourlyRate.toInt()} - ${(hourlyRate * 1.5).toInt()}';
   String get displayDistance => '${distanceKm.toStringAsFixed(1)} km';
