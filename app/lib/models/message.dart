@@ -10,6 +10,7 @@ class Message {
   final ProviderModel? provider;
   final String? serviceType;
   final String? locationHint;
+  final String? requestedDatetime; // ISO string for availability day check
 
   Message({
     required this.id,
@@ -19,6 +20,7 @@ class Message {
     this.provider,
     this.serviceType,
     this.locationHint,
+    this.requestedDatetime,
   }) : timestamp = timestamp ?? DateTime.now();
 
   factory Message.user(String text) => Message(
@@ -47,10 +49,11 @@ class Message {
         provider: topProvider,
       );
 
-  factory Message.providerCard(ProviderModel provider) => Message(
+  factory Message.providerCard(ProviderModel provider, {String? requestedDatetime}) => Message(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         text: '',
         type: MessageType.providerCard,
         provider: provider,
+        requestedDatetime: requestedDatetime,
       );
 }

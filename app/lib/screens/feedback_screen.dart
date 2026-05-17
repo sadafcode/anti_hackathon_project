@@ -3,11 +3,19 @@ import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 import '../services/api_service.dart';
+import '../services/booking_firestore_service.dart';
 
 class FeedbackScreen extends StatefulWidget {
   final ProviderModel provider;
+  final String? bookingId;
+  final String clientName;
 
-  const FeedbackScreen({super.key, required this.provider});
+  const FeedbackScreen({
+    super.key,
+    required this.provider,
+    this.bookingId,
+    this.clientName = 'Client',
+  });
 
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
@@ -74,6 +82,8 @@ class _FeedbackScreenState extends State<FeedbackScreen>
   }
 
   bool _isSubmitting = false;
+  double _newRating = 0;
+  int _newTotalReviews = 0;
 
   void _submit() async {
     if (_selectedStars == 0) {
@@ -85,42 +95,68 @@ class _FeedbackScreenState extends State<FeedbackScreen>
       );
       return;
     }
-    
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
-    
+
+    final reviewText = [
+      _commentController.text.trim(),
+      if (_selectedTags.isNotEmpty) _selectedTags.join(', '),
+    ].where((s) => s.isNotEmpty).join(' | ');
+
     try {
-      final req = {
+      // 1. Update providers.json via backend (recalculates rolling average)
+      final rateResp = await ApiService.rateProvider(
+        providerId: widget.provider.id,
+        bookingId: widget.bookingId ?? 'unknown',
+        stars: _selectedStars,
+        reviewText: reviewText,
+        clientName: widget.clientName,
+      );
+
+      // 2. Save review to Firestore reviews collection (real-time, shown on profile)
+      await BookingFirestoreService.submitReview(
+        providerId: widget.provider.id,
+        bookingId: widget.bookingId ?? 'unknown',
+        stars: _selectedStars,
+        reviewText: reviewText.isEmpty ? _ratingLabel : reviewText,
+        clientName: widget.clientName,
+      );
+
+      // 3. Also send full feedback to backend agent (for dispute/quality logic)
+      await ApiService.submitFeedback({
         'provider': widget.provider.toJson(),
-        'mock_action': 'on_time', // Mock action since we are simulating
+        'mock_action': 'on_time',
         'feedback': {
-           'stars': _selectedStars,
-           'comment': _commentController.text,
-           'tags': _selectedTags.toList()
-        }
-      };
-      
-      await ApiService.submitFeedback(req);
-      
+          'stars': _selectedStars,
+          'comment': _commentController.text.trim(),
+          'tags': _selectedTags.toList(),
+        },
+      });
+
       if (mounted) {
-        Navigator.pop(context); // Close loader
+        Navigator.pop(context);
         setState(() {
           _isSubmitting = false;
           _submitted = true;
+          _newRating = (rateResp['new_rating'] as num?)?.toDouble() ??
+              widget.provider.rating;
+          _newTotalReviews =
+              (rateResp['total_reviews'] as int?) ?? widget.provider.totalReviews + 1;
         });
         _successController.forward();
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Close loader
+        Navigator.pop(context);
         setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -478,13 +514,13 @@ class _FeedbackScreenState extends State<FeedbackScreen>
               ),
               const SizedBox(height: 10),
               Text(
-                'Aapka feedback ${widget.provider.name} ki profile update kar dega.',
+                'Aapka review ${widget.provider.name} ki profile mein add ho gaya!',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 14, color: AppTheme.textGrey),
+                style: const TextStyle(fontSize: 14, color: AppTheme.textGrey),
               ),
-              const SizedBox(height: 8),
-              // Show selected stars
+              const SizedBox(height: 16),
+
+              // Stars given
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
@@ -492,11 +528,47 @@ class _FeedbackScreenState extends State<FeedbackScreen>
                   (i) => Icon(
                     i < _selectedStars ? Icons.star : Icons.star_outline,
                     color: Colors.amber.shade500,
-                    size: 26,
+                    size: 28,
                   ),
                 ),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 16),
+
+              // Updated provider rating card
+              if (_newRating > 0)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.star, color: Colors.amber.shade600, size: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${widget.provider.name} ki nai rating: ',
+                        style: const TextStyle(
+                            fontSize: 13, color: AppTheme.textDark),
+                      ),
+                      Text(
+                        _newRating.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                      Text(
+                        ' ($_newTotalReviews reviews)',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textGrey),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/booking_firestore_service.dart';
 
 class ProviderNotificationScreen extends StatefulWidget {
   final String providerId;
@@ -12,7 +14,6 @@ class ProviderNotificationScreen extends StatefulWidget {
       _ProviderNotificationScreenState();
 }
 
-// Screen phases
 enum _Phase { pending, declining, accepted, cancelling, cancelled, autoDenied }
 
 class _ProviderNotificationScreenState
@@ -20,15 +21,14 @@ class _ProviderNotificationScreenState
     with TickerProviderStateMixin {
   _Phase _phase = _Phase.pending;
 
-  // 5-minute countdown
-  static const int _totalSeconds = 300;
+  // Smart timeout: 30 min for urgent (same day), 1 hour for advance bookings
+  // In real app this would come from booking data. For demo: 3600s (1 hour).
+  static const int _totalSeconds = 3600;
   int _remainingSeconds = _totalSeconds;
   Timer? _countdownTimer;
 
-  // Decline reason
   String? _declineReason;
 
-  // Animations
   late AnimationController _successController;
   late Animation<double> _successScale;
   late AnimationController _shakeController;
@@ -36,6 +36,8 @@ class _ProviderNotificationScreenState
 
   bool _isLoading = true;
   Map<String, dynamic>? _realBooking;
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _bookingSubscription;
 
   static const List<String> _declineReasons = [
     'Already busy hoon',
@@ -65,34 +67,42 @@ class _ProviderNotificationScreenState
       CurvedAnimation(parent: _shakeController, curve: Curves.elasticOut),
     );
 
-    _fetchPendingBooking();
+    _listenForBookings();
   }
 
-  Future<void> _fetchPendingBooking() async {
-    try {
-      final bookings = await ApiService.getPendingBookings(widget.providerId);
-      if (mounted) {
-        if (bookings.isNotEmpty) {
+  void _listenForBookings() {
+    _bookingSubscription = BookingFirestoreService
+        .providerBookingsStream(widget.providerId)
+        .listen(
+      (snapshot) {
+        if (!mounted) return;
+        if (snapshot.docs.isNotEmpty && _realBooking == null) {
+          // Sort client-side by createdAt to get the latest
+          final docs = snapshot.docs.toList();
+          docs.sort((a, b) {
+            final aTs = a.data()['createdAt'] as Timestamp?;
+            final bTs = b.data()['createdAt'] as Timestamp?;
+            if (aTs == null || bTs == null) return 0;
+            return bTs.compareTo(aTs);
+          });
+          final data = docs.first.data();
           setState(() {
-            _realBooking = bookings.last;
+            _realBooking = data;
             _isLoading = false;
           });
           _startCountdown();
-        } else {
+        } else if (_realBooking == null) {
           setState(() => _isLoading = false);
         }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching bookings: $e')));
-      }
-    }
+      },
+      onError: (_) {
+        if (mounted) setState(() => _isLoading = false);
+      },
+    );
   }
 
   void _startCountdown() {
-    _countdownTimer =
-        Timer.periodic(const Duration(seconds: 1), (t) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       setState(() {
         if (_remainingSeconds > 0) {
@@ -110,6 +120,7 @@ class _ProviderNotificationScreenState
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _bookingSubscription?.cancel();
     _successController.dispose();
     _shakeController.dispose();
     super.dispose();
@@ -118,24 +129,31 @@ class _ProviderNotificationScreenState
   void _accept() async {
     _countdownTimer?.cancel();
     if (_realBooking == null) return;
-    
+    final bookingId = _realBooking!['id'] as String;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
-      await ApiService.respondToBooking(_realBooking!['id'], widget.providerId, 'accept');
+      await BookingFirestoreService.acceptBooking(bookingId);
+      // Best-effort backend call for business logic
+      try {
+        await ApiService.respondToBooking(bookingId, widget.providerId, 'accept');
+      } catch (_) {}
+
       if (mounted) {
-        Navigator.pop(context); // loader
+        Navigator.pop(context);
         setState(() => _phase = _Phase.accepted);
         _successController.forward();
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -154,23 +172,31 @@ class _ProviderNotificationScreenState
     }
     _countdownTimer?.cancel();
     if (_realBooking == null) return;
-    
+    final bookingId = _realBooking!['id'] as String;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
-      await ApiService.respondToBooking(_realBooking!['id'], widget.providerId, 'decline', reason: _declineReason);
+      await BookingFirestoreService.declineBooking(bookingId, _declineReason!);
+      // Best-effort backend call for auto-reschedule
+      try {
+        await ApiService.respondToBooking(bookingId, widget.providerId, 'decline',
+            reason: _declineReason);
+      } catch (_) {}
+
       if (mounted) {
         Navigator.pop(context);
-        setState(() => _phase = _Phase.autoDenied); // or explicitly declined state
+        setState(() => _phase = _Phase.autoDenied);
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -181,15 +207,24 @@ class _ProviderNotificationScreenState
 
   void _confirmCancel() async {
     if (_realBooking == null) return;
-    
+    final bookingId = _realBooking!['id'] as String;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
-      await ApiService.cancelAfterAccept(_realBooking!['id']);
+      // 1. Update Firestore booking status
+      await BookingFirestoreService.cancelBooking(bookingId);
+      // 2. Track cancellation in provider_stats (always works, no memory dependency)
+      await BookingFirestoreService.incrementProviderCancellations(widget.providerId);
+      // 3. Apply penalty to providers.json via direct providerId endpoint (reliable)
+      try {
+        await ApiService.applyPenalty(widget.providerId);
+      } catch (_) {}
+
       if (mounted) {
         Navigator.pop(context);
         setState(() => _phase = _Phase.cancelled);
@@ -197,20 +232,27 @@ class _ProviderNotificationScreenState
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')));
       }
     }
   }
 
   String get _countdownText {
+    if (_remainingSeconds >= 3600) {
+      final h = _remainingSeconds ~/ 3600;
+      final m = (_remainingSeconds % 3600) ~/ 60;
+      return '${h}h ${m.toString().padLeft(2, '0')}m';
+    }
     final m = _remainingSeconds ~/ 60;
     final s = (_remainingSeconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
   }
 
   Color get _timerColor {
-    if (_remainingSeconds > 180) return AppTheme.primary;
-    if (_remainingSeconds > 60) return Colors.orange.shade700;
+    final ratio = _remainingSeconds / _totalSeconds;
+    if (ratio > 0.5) return AppTheme.primary;
+    if (ratio > 0.2) return Colors.orange.shade700;
     return Colors.red.shade600;
   }
 
@@ -220,8 +262,8 @@ class _ProviderNotificationScreenState
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text('Booking Request'),
-        automaticallyImplyLeading:
-            _phase == _Phase.accepted || _phase == _Phase.cancelled ||
+        automaticallyImplyLeading: _phase == _Phase.accepted ||
+            _phase == _Phase.cancelled ||
             _phase == _Phase.autoDenied,
       ),
       body: _buildBody(),
@@ -235,7 +277,7 @@ class _ProviderNotificationScreenState
     if (_realBooking == null) {
       return const Center(child: Text('No pending bookings.'));
     }
-    
+
     return switch (_phase) {
       _Phase.pending => _buildPendingView(),
       _Phase.declining => _buildDecliningView(),
@@ -328,13 +370,12 @@ class _ProviderNotificationScreenState
   }
 
   Widget _buildBookingCard() {
-    final customerName = 'Customer';
-    final customerArea = _realBooking?['request']?['intent']?['location']?['area'] ?? 'Unknown Area';
-    final serviceType = _realBooking?['request']?['intent']?['service_type'] ?? 'Service';
-    final datetimeStr = _realBooking?['datetime'] ?? '';
-    final offeredPrice = _realBooking?['request']?['pricing']?['total'] ?? 0;
-    final bookingId = _realBooking?['id'] ?? 'N/A';
-    
+    final area = _realBooking?['area'] as String? ?? 'Unknown Area';
+    final serviceType = _realBooking?['serviceType'] as String? ?? 'Service';
+    final datetime = _realBooking?['datetime'] as String? ?? '';
+    final amount = _realBooking?['amount'] ?? 0;
+    final bookingId = _realBooking?['id'] as String? ?? 'N/A';
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -349,7 +390,6 @@ class _ProviderNotificationScreenState
       ),
       child: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -362,14 +402,14 @@ class _ProviderNotificationScreenState
                 Container(
                   width: 44,
                   height: 44,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppTheme.primary,
                     shape: BoxShape.circle,
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Text(
-                      customerName[0].toUpperCase(),
-                      style: const TextStyle(
+                      'C',
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
@@ -382,16 +422,16 @@ class _ProviderNotificationScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        customerName,
-                        style: const TextStyle(
+                      const Text(
+                        'Customer',
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textDark,
                         ),
                       ),
                       Text(
-                        customerArea,
+                        area,
                         style: const TextStyle(
                             fontSize: 12, color: AppTheme.textGrey),
                       ),
@@ -399,22 +439,22 @@ class _ProviderNotificationScreenState
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.3)),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(Icons.near_me_outlined,
+                      Icon(Icons.near_me_outlined,
                           size: 12, color: AppTheme.primary),
-                      const SizedBox(width: 3),
+                      SizedBox(width: 3),
                       Text(
                         'Nearby',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.primary,
@@ -426,21 +466,19 @@ class _ProviderNotificationScreenState
               ],
             ),
           ),
-          // Details
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _detailRow(Icons.build_outlined, 'Service',
-                    serviceType),
+                _detailRow(Icons.build_outlined, 'Service', serviceType),
                 _divider(),
                 _detailRow(
-                    Icons.calendar_today_outlined, 'Date/Time', datetimeStr),
+                    Icons.calendar_today_outlined, 'Date/Time', datetime),
                 _divider(),
                 _detailRow(
                   Icons.payments_outlined,
                   'Offered Price',
-                  'Rs. $offeredPrice',
+                  'Rs. $amount',
                   valueColor: AppTheme.primary,
                   valueBold: true,
                 ),
@@ -469,8 +507,8 @@ class _ProviderNotificationScreenState
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.primary,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(vertical: 16),
           elevation: 0,
         ),
@@ -483,8 +521,7 @@ class _ProviderNotificationScreenState
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: _showDeclinePanel,
-        icon: Icon(Icons.cancel_outlined,
-            color: Colors.red.shade600, size: 20),
+        icon: Icon(Icons.cancel_outlined, color: Colors.red.shade600, size: 20),
         label: Text(
           'Decline Karo',
           style: TextStyle(
@@ -494,8 +531,8 @@ class _ProviderNotificationScreenState
         ),
         style: OutlinedButton.styleFrom(
           side: BorderSide(color: Colors.red.shade400),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),
@@ -525,7 +562,9 @@ class _ProviderNotificationScreenState
             animation: _shake,
             builder: (_, child) => Transform.translate(
               offset: Offset(
-                _shake.value * 6 * ((_shakeController.value * 10).round().isEven ? 1 : -1),
+                _shake.value *
+                    6 *
+                    ((_shakeController.value * 10).round().isEven ? 1 : -1),
                 0,
               ),
               child: child,
@@ -546,8 +585,7 @@ class _ProviderNotificationScreenState
                 children: _declineReasons.map((reason) {
                   final selected = _declineReason == reason;
                   return InkWell(
-                    onTap: () =>
-                        setState(() => _declineReason = reason),
+                    onTap: () => setState(() => _declineReason = reason),
                     borderRadius: BorderRadius.circular(14),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -601,8 +639,7 @@ class _ProviderNotificationScreenState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () =>
-                      setState(() => _phase = _Phase.pending),
+                  onPressed: () => setState(() => _phase = _Phase.pending),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: Colors.grey.shade300),
                     shape: RoundedRectangleBorder(
@@ -641,13 +678,17 @@ class _ProviderNotificationScreenState
   // ─── ACCEPTED ───────────────────────────────────────────────────────────────
 
   Widget _buildAcceptedView() {
+    final area = _realBooking?['area'] as String? ?? 'Unknown Area';
+    final serviceType = _realBooking?['serviceType'] as String? ?? 'Service';
+    final datetime = _realBooking?['datetime'] as String? ?? '';
+    final amount = _realBooking?['amount'] as int? ?? 0;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: ScaleTransition(
         scale: _successScale,
         child: Column(
           children: [
-            // Success banner
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 20),
@@ -676,7 +717,6 @@ class _ProviderNotificationScreenState
               ),
             ),
             const SizedBox(height: 14),
-            // Active booking card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -692,22 +732,19 @@ class _ProviderNotificationScreenState
               ),
               child: Column(
                 children: [
-                  _detailRow(Icons.person_outline, 'Customer',
-                      'Customer'),
+                  _detailRow(Icons.person_outline, 'Customer', 'Customer'),
                   _divider(),
-                  _detailRow(Icons.location_on_outlined, 'Location',
-                      _realBooking?['request']?['intent']?['location']?['area'] ?? 'Unknown Area'),
+                  _detailRow(Icons.location_on_outlined, 'Location', area),
                   _divider(),
-                  _detailRow(Icons.build_outlined, 'Service',
-                      _realBooking?['request']?['intent']?['service_type'] ?? 'Service'),
+                  _detailRow(Icons.build_outlined, 'Service', serviceType),
                   _divider(),
                   _detailRow(Icons.calendar_today_outlined, 'Date & Time',
-                      _realBooking?['datetime'] ?? ''),
+                      datetime),
                   _divider(),
                   _detailRow(
                     Icons.payments_outlined,
                     'Aapki Kamai',
-                    'Rs. ${((_realBooking?['request']?['pricing']?['total'] ?? 0) * 0.9).round()} (90%)',
+                    'Rs. ${(amount * 0.9).round()} (90%)',
                     valueColor: AppTheme.primary,
                     valueBold: true,
                   ),
@@ -715,7 +752,6 @@ class _ProviderNotificationScreenState
               ),
             ),
             const SizedBox(height: 24),
-            // Cancel button
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -758,8 +794,8 @@ class _ProviderNotificationScreenState
               color: Colors.red.shade50,
               shape: BoxShape.circle,
             ),
-            child:
-                Icon(Icons.warning_amber_outlined, size: 40, color: Colors.red.shade600),
+            child: Icon(Icons.warning_amber_outlined,
+                size: 40, color: Colors.red.shade600),
           ),
           const SizedBox(height: 20),
           const Text(
@@ -800,15 +836,13 @@ class _ProviderNotificationScreenState
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.close,
-                              size: 14, color: Colors.red.shade600),
+                          Icon(Icons.close, size: 14, color: Colors.red.shade600),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               t,
                               style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red.shade800),
+                                  fontSize: 12, color: Colors.red.shade800),
                             ),
                           ),
                         ],
@@ -822,8 +856,7 @@ class _ProviderNotificationScreenState
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () =>
-                      setState(() => _phase = _Phase.accepted),
+                  onPressed: () => setState(() => _phase = _Phase.accepted),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     shape: RoundedRectangleBorder(
@@ -879,7 +912,8 @@ class _ProviderNotificationScreenState
                 color: Colors.red.shade50,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.cancel, size: 44, color: Colors.red.shade600),
+              child:
+                  Icon(Icons.cancel, size: 44, color: Colors.red.shade600),
             ),
             const SizedBox(height: 20),
             const Text(
@@ -1024,15 +1058,13 @@ class _ProviderNotificationScreenState
           Icon(icon, size: 15, color: AppTheme.textGrey),
           const SizedBox(width: 8),
           Text(label,
-              style: const TextStyle(
-                  fontSize: 13, color: AppTheme.textGrey)),
+              style: const TextStyle(fontSize: 13, color: AppTheme.textGrey)),
           const Spacer(),
           Text(
             value,
             style: TextStyle(
               fontSize: 13,
-              fontWeight:
-                  valueBold ? FontWeight.w700 : FontWeight.w600,
+              fontWeight: valueBold ? FontWeight.w700 : FontWeight.w600,
               color: valueColor ?? AppTheme.textDark,
             ),
           ),
@@ -1045,26 +1077,4 @@ class _ProviderNotificationScreenState
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Divider(color: Colors.grey.shade100, height: 1),
       );
-}
-
-class _MockBooking {
-  final String customerName;
-  final String customerArea;
-  final String serviceType;
-  final String date;
-  final String time;
-  final int offeredPrice;
-  final String distance;
-  final String bookingId;
-
-  const _MockBooking({
-    required this.customerName,
-    required this.customerArea,
-    required this.serviceType,
-    required this.date,
-    required this.time,
-    required this.offeredPrice,
-    required this.distance,
-    required this.bookingId,
-  });
 }

@@ -316,7 +316,6 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
       2 => 'Door ki ghanti bajao',
       3 => 'Provider kaam mein laga hua hai',
       _ => 'Feedback zaroor den — provider ki rating par asar hoga',
-      int() => '',
     };
   }
 
@@ -556,6 +555,6 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
 
 class _CheckItem {
   final String label;
-  bool checked;
-  _CheckItem(this.label, {this.checked = false});
+  bool checked = false;
+  _CheckItem(this.label);
 }

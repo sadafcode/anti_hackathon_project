@@ -1,9 +1,15 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:pinput/pinput.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/phone_auth_service.dart';
+import '../services/provider_session.dart';
+import 'nic_scanner_screen.dart';
 
 class ProviderRegistrationScreen extends StatefulWidget {
   const ProviderRegistrationScreen({super.key});
@@ -28,6 +34,7 @@ class _ProviderRegistrationScreenState
 
   // State
   File? _pickedPhoto;
+  Uint8List? _pickedBytes; // for web (Image.file not supported on web)
   bool _useAvatar = false;
   final ImagePicker _picker = ImagePicker();
 
@@ -58,21 +65,20 @@ class _ProviderRegistrationScreenState
   bool _submitting = false;
   bool _submitted = false;
   bool _nadraVerified = false;
+  String _registeredProviderId = '';
+
+  // Phone OTP state
+  bool _phoneVerified = false;
+  bool _sendingOtp = false;
+  bool _verifyingOtp = false;
+
+  // NIC verification state
+  bool _nicVerified = false;
+  bool _verifyingNic = false;
+  String? _nicMismatchMsg;
 
   late AnimationController _successController;
   late Animation<double> _successScale;
-
-  // Mock NADRA database
-  static const Map<String, bool> _nadraDb = {
-    '4210112345671': true,
-    '3520198765432': true,
-    '6110187654321': true,
-    '3520112233445': true,
-    '6110198877665': true,
-    '4210187654322': true,
-    '3310145678901': false,
-    '4220156789012': false,
-  };
 
   static const List<String> _serviceTypes = [
     'Plumber',
@@ -85,14 +91,31 @@ class _ProviderRegistrationScreenState
     'Mechanic',
   ];
 
-  static const List<String> _islamabadSectors = [
-    'F-6', 'F-7', 'F-8', 'F-10', 'F-11',
-    'G-6', 'G-7', 'G-8', 'G-9', 'G-10', 'G-11', 'G-13',
-    'I-8', 'I-9', 'I-10',
-    'E-7', 'E-11',
-    'DHA Phase 1', 'DHA Phase 2',
-    'Bahria Town', 'PWD', 'Gulberg',
-  ];
+  static const Map<String, List<String>> _pakistanAreas = {
+    'Lahore': ['Gulberg', 'DHA Lahore Phase 1', 'DHA Lahore Phase 2', 'DHA Lahore Phase 5', 'DHA Lahore Phase 6', 'Model Town', 'Johar Town', 'Bahria Town Lahore', 'Cantt Lahore', 'Garden Town', 'Iqbal Town', 'Shadman', 'Wapda Town', 'Township', 'Faisal Town', 'Cavalry Ground', 'Allama Iqbal Town', 'Samanabad'],
+    'Karachi': ['DHA Karachi', 'Clifton', 'Gulshan-e-Iqbal', 'North Nazimabad', 'Gulistan-e-Jauhar', 'Malir', 'Korangi', 'PECHS', 'Liaquatabad', 'Orangi Town', 'Saddar Karachi', 'Bahria Town Karachi', 'Nazimabad', 'Federal B Area', 'Landhi'],
+    'Islamabad': ['F-6', 'F-7', 'F-8', 'F-10', 'F-11', 'G-6', 'G-7', 'G-8', 'G-9', 'G-10', 'G-11', 'G-13', 'I-8', 'I-9', 'I-10', 'E-7', 'E-11', 'DHA Islamabad', 'Bahria Town Islamabad', 'PWD', 'Gulberg Islamabad'],
+    'Rawalpindi': ['Satellite Town Rawalpindi', 'Chaklala', 'Cantt Rawalpindi', 'Bahria Town Rawalpindi', 'DHA Rawalpindi', 'Sadiqabad', 'Westridge', 'Saddar Rawalpindi', 'Lalazar'],
+    'Faisalabad': ['Peoples Colony', 'Jinnah Colony', 'Millat Town', 'Gulberg Faisalabad', 'Madina Town', 'Susan Road'],
+    'Multan': ['Cantt Multan', 'Gulgasht Colony', 'New Multan', 'Shah Rukn-e-Alam', 'Bosan Road'],
+    'Peshawar': ['Hayatabad', 'University Town', 'Cantt Peshawar', 'Saddar Peshawar', 'Ring Road Peshawar', 'Gulbahar'],
+    'Quetta': ['Satellite Town Quetta', 'Cantt Quetta', 'Jinnah Town', 'Airport Road Quetta', 'Zarghoon Road'],
+    'Hyderabad': ['Latifabad', 'Qasimabad', 'Hirabad', 'Cantt Hyderabad'],
+    'Gujranwala': ['G.T Road Gujranwala', 'Model Town Gujranwala', 'Peoples Colony Gujranwala'],
+    'Sialkot': ['Cantt Sialkot', 'Paris Road', 'Allama Iqbal Road'],
+    'Abbottabad': ['Cantt Abbottabad', 'Mandian', 'Havelian Road', 'PMA Road'],
+    'Gujrat': ['Cantt Gujrat', 'Model Town Gujrat'],
+    'Bahawalpur': ['Model Town Bahawalpur', 'Satellite Town Bahawalpur'],
+    'Sargodha': ['University Road Sargodha', 'Satellite Town Sargodha'],
+    'Sukkur': ['Airport Road Sukkur', 'Rohri'],
+    'Larkana': ['Cantt Larkana', 'Larkana City'],
+    'Mardan': ['Cantt Mardan', 'Mardan City'],
+    'Mingora': ['Swat', 'Mingora City'],
+    'Dera Ghazi Khan': ['Cantt DG Khan', 'DG Khan City'],
+    'Sahiwal': ['Sahiwal City', 'Chichawatni'],
+    'Sheikhupura': ['Sheikhupura City', 'Muridke'],
+    'Rahim Yar Khan': ['RYK City', 'Liaquatpur'],
+  };
 
   static const List<String> _toolOptions = [
     'Multimeter', 'Drill', 'Gas Kit', 'Pipe Wrench',
@@ -133,8 +156,158 @@ class _ProviderRegistrationScreenState
     super.dispose();
   }
 
+  // ── Phone OTP ──────────────────────────────────────────────────
+  Future<void> _sendOtp() async {
+    final phone = _phoneCtrl.text.trim();
+    if (phone.isEmpty) { _showSnack('Phone number daalein'); return; }
+    setState(() => _sendingOtp = true);
+    final error = await PhoneAuthService.sendOtp(phone);
+    setState(() => _sendingOtp = false);
+    if (error != null) { _showSnack(error); return; }
+    if (mounted) _showOtpDialog();
+  }
+
+  void _showOtpDialog() {
+    final otpCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('OTP Darj Karein', style: TextStyle(fontWeight: FontWeight.w700)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'SMS gaya: ${_phoneCtrl.text.trim()}',
+                style: const TextStyle(fontSize: 12, color: AppTheme.textGrey),
+              ),
+              const SizedBox(height: 20),
+              Pinput(
+                controller: otpCtrl,
+                length: 6,
+                autofocus: true,
+                defaultPinTheme: PinTheme(
+                  width: 44, height: 50,
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                focusedPinTheme: PinTheme(
+                  width: 44, height: 50,
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppTheme.primary, width: 2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              if (_verifyingOtp) ...[
+                const SizedBox(height: 16),
+                const CircularProgressIndicator(color: AppTheme.primary),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: _verifyingOtp ? null : () async {
+                setS(() => _verifyingOtp = true);
+                final ok = await PhoneAuthService.verifyOtp(otpCtrl.text.trim());
+                if (!ctx.mounted) return;
+                setS(() => _verifyingOtp = false);
+                if (ok) {
+                  Navigator.pop(ctx);
+                  if (mounted) setState(() => _phoneVerified = true);
+                  if (mounted) _showSnack('Phone verify ho gaya! ✓');
+                } else {
+                  _showSnack('OTP galat hai, dobara try karein');
+                }
+              },
+              child: const Text('Verify', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── NIC Verification ───────────────────────────────────────────
+  Future<void> _verifyNicFromImage(File imageFile) async {
+    setState(() { _verifyingNic = true; _nicMismatchMsg = null; });
+    try {
+      final inputImage = InputImage.fromFile(imageFile);
+      final recognizer = TextRecognizer();
+      final result = await recognizer.processImage(inputImage);
+      recognizer.close();
+
+      final rawText = result.text.replaceAll('\n', ' ');
+      final match = RegExp(r'\b\d{5}[-\s]?\d{7}[-\s]?\d\b|\b\d{13}\b')
+          .firstMatch(rawText);
+
+      if (match == null) {
+        setState(() {
+          _verifyingNic = false;
+          _nicMismatchMsg = 'NIC card ki image mein number nahi mila. Saaf photo lein.';
+        });
+        return;
+      }
+
+      final raw = match.group(0)!.replaceAll(RegExp(r'[-\s]'), '');
+      final fromImage = '${raw.substring(0,5)}-${raw.substring(5,12)}-${raw[12]}';
+      final typed = _nicCtrl.text.trim().replaceAll(RegExp(r'[-\s]'), '');
+      final typedFormatted = typed.length == 13
+          ? '${typed.substring(0,5)}-${typed.substring(5,12)}-${typed[12]}'
+          : _nicCtrl.text.trim();
+
+      if (fromImage == typedFormatted) {
+        setState(() { _nicVerified = true; _verifyingNic = false; });
+        _showSnack('NIC verify ho gaya! Blue tick milega ✓');
+      } else {
+        setState(() {
+          _verifyingNic = false;
+          _nicMismatchMsg = 'Match nahi hua.\nImage: $fromImage\nTyped: $typedFormatted';
+        });
+      }
+    } catch (e) {
+      setState(() { _verifyingNic = false; _nicMismatchMsg = 'Error: $e'; });
+    }
+  }
+
+  Future<void> _pickNicFromGallery() async {
+    if (_nicCtrl.text.trim().isEmpty) {
+      _showSnack('Pehle NIC number type karein'); return;
+    }
+    final xFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    if (xFile != null) await _verifyNicFromImage(File(xFile.path));
+  }
+
+  Future<void> _scanNicWithCamera() async {
+    if (_nicCtrl.text.trim().isEmpty) {
+      _showSnack('Pehle NIC number type karein'); return;
+    }
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const NicScannerScreen()),
+    );
+    if (result != null && result['image'] != null) {
+      await _verifyNicFromImage(result['image'] as File);
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_phoneVerified) {
+      _showSnack('Phone number verify karna zaroori hai');
+      return;
+    }
     if (_selectedServices.isEmpty) {
       _showSnack('Kam az kam ek service chunein');
       return;
@@ -154,7 +327,7 @@ class _ProviderRegistrationScreenState
         'experience_years': int.tryParse(_expCtrl.text.trim()) ?? 1,
         'hourly_rate': int.tryParse(_rateCtrl.text.trim()) ?? 500,
         'certifications': _certCtrl.text.trim(),
-        'service_types': _selectedServices.toList(),
+        'service_types': _selectedServices.map((s) => s.toLowerCase()).toList(),
         'area': _selectedArea,
         'tools': _selectedTools.toList(),
       };
@@ -162,10 +335,17 @@ class _ProviderRegistrationScreenState
       final response = await ApiService.registerProvider(providerData);
 
       if (mounted) {
+        final pid = (response['provider']['id'] as String?) ?? '';
+        final pname = _nameCtrl.text.trim();
+        // Persist provider ID so "Provider Hoon" button auto-detects it
+        if (pid.isNotEmpty) {
+          ProviderSession.save(pid, pname);
+        }
         setState(() {
           _submitting = false;
           _submitted = true;
           _nadraVerified = response['provider']['blue_tick'] ?? false;
+          _registeredProviderId = pid;
         });
         _successController.forward();
       }
@@ -221,27 +401,132 @@ class _ProviderRegistrationScreenState
               _buildTextField(_nameCtrl, 'Pura Naam *', Icons.badge_outlined,
                   validator: _requiredValidator),
               const SizedBox(height: 12),
+
+              // ── Phone + OTP ──────────────────────────────────────
               _buildTextField(
                 _phoneCtrl,
                 'Phone Number *',
                 Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                readOnly: _phoneVerified,
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Required';
                   if (v.trim().length < 10) return 'Valid number dein';
                   return null;
                 },
               ),
+              const SizedBox(height: 8),
+              _phoneVerified
+                  ? _buildVerifiedBadge('Phone Verified', Icons.phone_in_talk)
+                  : SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _sendingOtp ? null : _sendOtp,
+                        icon: _sendingOtp
+                            ? const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.sms_outlined, size: 16, color: Colors.white),
+                        label: Text(
+                          _sendingOtp ? 'SMS ja raha hai...' : 'OTP Bhejo (Zaroori)',
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
               const SizedBox(height: 12),
+
+              // ── NIC + Scan ───────────────────────────────────────
               _buildTextField(
                 _nicCtrl,
-                'NIC Number (optional)',
+                'NIC Number (optional — blue tick)',
                 Icons.credit_card_outlined,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                helperText: 'NIC se blue tick milega — optional hai',
+                readOnly: _nicVerified,
+                helperText: 'NIC verify karo — zyada customers book karenge',
               ),
+              const SizedBox(height: 8),
+              if (_nicVerified)
+                _buildVerifiedBadge('NIC Verified — Blue Tick', Icons.verified)
+              else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _verifyingNic ? null : _pickNicFromGallery,
+                        icon: const Icon(Icons.upload_file_outlined, size: 15),
+                        label: const Text('Photo Upload', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primary,
+                          side: const BorderSide(color: AppTheme.primary),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _verifyingNic ? null : _scanNicWithCamera,
+                        icon: const Icon(Icons.document_scanner_outlined, size: 15, color: Colors.white),
+                        label: const Text('📷 Auto Scan', style: TextStyle(fontSize: 12, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_verifyingNic)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                        SizedBox(width: 8),
+                        Text('NIC verify ho raha hai...', style: TextStyle(fontSize: 12, color: AppTheme.textGrey)),
+                      ],
+                    ),
+                  ),
+                if (_nicMismatchMsg != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning_amber_outlined, size: 15, color: Colors.red.shade700),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(_nicMismatchMsg!,
+                                style: TextStyle(fontSize: 11, color: Colors.red.shade700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                const Text(
+                  '💡 Clear photo lein — NIC seedhi pakdein, blur nahi',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                ),
+              ],
             ]),
             const SizedBox(height: 20),
 
@@ -360,12 +645,26 @@ class _ProviderRegistrationScreenState
     final XFile? image =
         await _picker.pickImage(source: source, imageQuality: 80);
     if (image != null && mounted) {
+      final bytes = await image.readAsBytes();
       setState(() {
-        _pickedPhoto = File(image.path);
+        _pickedBytes = bytes;
+        _pickedPhoto = kIsWeb ? null : File(image.path);
         _useAvatar = false;
       });
     }
   }
+
+  Widget _buildPickedImage({required double size}) {
+    if (_pickedBytes != null) {
+      return Image.memory(_pickedBytes!, fit: BoxFit.cover, width: size, height: size);
+    }
+    if (_pickedPhoto != null) {
+      return Image.file(_pickedPhoto!, fit: BoxFit.cover, width: size, height: size);
+    }
+    return const SizedBox.shrink();
+  }
+
+  bool get _hasPhoto => _pickedBytes != null || _pickedPhoto != null;
 
   Widget _buildPhotoUpload() {
     return Column(
@@ -381,7 +680,7 @@ class _ProviderRegistrationScreenState
                 icon: Icons.add_a_photo_outlined,
                 label: 'Photo Upload',
                 sublabel: 'Camera / Gallery',
-                selected: _pickedPhoto != null,
+                selected: _hasPhoto,
                 onTap: () => _showPickerSheet(),
               ),
             ),
@@ -395,6 +694,7 @@ class _ProviderRegistrationScreenState
                 onTap: () => setState(() {
                   _useAvatar = true;
                   _pickedPhoto = null;
+                  _pickedBytes = null;
                 }),
               ),
             ),
@@ -413,32 +713,25 @@ class _ProviderRegistrationScreenState
             height: 100,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _pickedPhoto != null
+              color: _hasPhoto
                   ? Colors.transparent
                   : _useAvatar
                       ? _avatarColor
                       : Colors.grey.shade100,
               border: Border.all(
-                color: (_pickedPhoto != null || _useAvatar)
+                color: (_hasPhoto || _useAvatar)
                     ? AppTheme.primary
                     : Colors.grey.shade300,
                 width: 2,
               ),
             ),
-            child: _pickedPhoto != null
-                ? ClipOval(
-                    child: Image.file(
-                      _pickedPhoto!,
-                      fit: BoxFit.cover,
-                      width: 100,
-                      height: 100,
-                    ),
-                  )
+            child: _hasPhoto
+                ? ClipOval(child: _buildPickedImage(size: 100))
                 : _useAvatar
                     ? Center(
                         child: ValueListenableBuilder(
                           valueListenable: _nameCtrl,
-                          builder: (_, __, ___) => Text(
+                          builder: (context, value, child) => Text(
                             _initials,
                             style: const TextStyle(
                               fontSize: 34,
@@ -451,7 +744,7 @@ class _ProviderRegistrationScreenState
                     : Icon(Icons.person_outline,
                         size: 44, color: Colors.grey.shade400),
           ),
-          if (_pickedPhoto != null || _useAvatar)
+          if (_hasPhoto || _useAvatar)
             Positioned(
               bottom: 2,
               right: 2,
@@ -566,7 +859,7 @@ class _ProviderRegistrationScreenState
                   _pickPhoto(ImageSource.gallery);
                 },
               ),
-              if (_pickedPhoto != null)
+              if (_hasPhoto)
                 ListTile(
                   leading: Icon(Icons.delete_outline,
                       color: Colors.red.shade600),
@@ -574,12 +867,36 @@ class _ProviderRegistrationScreenState
                       style: TextStyle(color: Colors.red.shade600)),
                   onTap: () {
                     Navigator.pop(context);
-                    setState(() => _pickedPhoto = null);
+                    setState(() { _pickedPhoto = null; _pickedBytes = null; });
                   },
                 ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVerifiedBadge(String label, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.green.shade300),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.green.shade700),
+          const SizedBox(width: 8),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green.shade700)),
+          const Spacer(),
+          Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
+        ],
       ),
     );
   }
@@ -592,12 +909,14 @@ class _ProviderRegistrationScreenState
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
     String? helperText,
+    bool readOnly = false,
   }) {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: validator,
+      readOnly: readOnly,
       style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
       decoration: InputDecoration(
         labelText: label,
@@ -686,36 +1005,48 @@ class _ProviderRegistrationScreenState
   }
 
   Widget _buildAreaDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _selectedArea,
-      hint: const Text('Area / Sector chunein *',
-          style: TextStyle(fontSize: 13, color: AppTheme.textGrey)),
-      decoration: InputDecoration(
-        prefixIcon: const Icon(Icons.location_on_outlined,
-            size: 18, color: AppTheme.primary),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
+    return GestureDetector(
+      onTap: _showAreaPicker,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+          border: Border.all(
+            color: _selectedArea != null ? AppTheme.primary : Colors.grey.shade200,
+            width: _selectedArea != null ? 1.5 : 1,
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+        child: Row(
+          children: [
+            Icon(Icons.location_on_outlined, size: 18, color: AppTheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _selectedArea ?? 'City / Area chunein *',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: _selectedArea != null ? AppTheme.textDark : AppTheme.textGrey,
+                ),
+              ),
+            ),
+            Icon(Icons.search, size: 18, color: Colors.grey.shade400),
+          ],
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide:
-              const BorderSide(color: AppTheme.primary, width: 1.5),
-        ),
-        filled: true,
-        fillColor: Colors.grey.shade50,
       ),
-      items: _islamabadSectors
-          .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13))))
-          .toList(),
-      onChanged: (v) => setState(() => _selectedArea = v),
-      validator: (v) => v == null ? 'Area chunein' : null,
+    );
+  }
+
+  void _showAreaPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AreaSearchSheet(
+        onSelected: (area) => setState(() => _selectedArea = area),
+        selectedArea: _selectedArea,
+        areas: _pakistanAreas,
+      ),
     );
   }
 
@@ -798,8 +1129,8 @@ class _ProviderRegistrationScreenState
           ),
           const SizedBox(height: 12),
           ..._weekDays.map((day) {
+            final daySelected = _availability.containsKey(day);
             final slots = _availability[day] ?? {};
-            final daySelected = slots.isNotEmpty;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Column(
@@ -982,15 +1313,8 @@ class _ProviderRegistrationScreenState
                       border: Border.all(
                           color: AppTheme.primary, width: 2),
                     ),
-                    child: _pickedPhoto != null
-                        ? ClipOval(
-                            child: Image.file(
-                              _pickedPhoto!,
-                              fit: BoxFit.cover,
-                              width: 90,
-                              height: 90,
-                            ),
-                          )
+                    child: _hasPhoto
+                        ? ClipOval(child: _buildPickedImage(size: 90))
                         : _useAvatar
                             ? Center(
                                 child: Text(
@@ -1089,7 +1413,92 @@ class _ProviderRegistrationScreenState
                     )
                     .toList(),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
+
+              // ── Provider ID card ──────────────────────────────────
+              if (_registeredProviderId.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Aapka Provider ID',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textGrey,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _registeredProviderId,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: AppTheme.primary,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () async {
+                              final messenger =
+                                  ScaffoldMessenger.of(context);
+                              await ProviderSession.copyIdToClipboard(
+                                  _registeredProviderId);
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Provider ID copy ho gaya!'),
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.copy,
+                                      size: 13, color: Colors.white),
+                                  SizedBox(width: 4),
+                                  Text('Copy',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Yeh ID note kar lein — notifications bhi is ID se aayenge',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -1149,4 +1558,173 @@ class _ProviderRegistrationScreenState
     if (v == null || v.trim().isEmpty) return 'Yeh field zaruri hai';
     return null;
   }
+}
+
+class _AreaSearchSheet extends StatefulWidget {
+  final void Function(String) onSelected;
+  final String? selectedArea;
+  final Map<String, List<String>> areas;
+
+  const _AreaSearchSheet({
+    required this.onSelected,
+    required this.selectedArea,
+    required this.areas,
+  });
+
+  @override
+  State<_AreaSearchSheet> createState() => _AreaSearchSheetState();
+}
+
+class _AreaSearchSheetState extends State<_AreaSearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<_AreaItem> _filtered = [];
+  List<_AreaItem> _all = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _all = widget.areas.entries.expand((entry) {
+      final city = entry.key;
+      return [
+        _AreaItem(city: city, area: city, isCity: true),
+        ...entry.value.map((a) => _AreaItem(city: city, area: a, isCity: false)),
+      ];
+    }).toList();
+    _filtered = List.from(_all);
+    _searchCtrl.addListener(_onSearch);
+  }
+
+  void _onSearch() {
+    final q = _searchCtrl.text.toLowerCase().trim();
+    setState(() {
+      _filtered = q.isEmpty
+          ? List.from(_all)
+          : _all.where((item) =>
+              item.area.toLowerCase().contains(q) ||
+              item.city.toLowerCase().contains(q)).toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'City ya area likho... (Lahore, Gulberg, DHA...)',
+                hintStyle: const TextStyle(fontSize: 13, color: AppTheme.textGrey),
+                prefixIcon: const Icon(Icons.search, size: 18, color: AppTheme.primary),
+                suffixIcon: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: () => _searchCtrl.clear(),
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _filtered.isEmpty
+                ? const Center(
+                    child: Text('Koi area nahi mila', style: TextStyle(color: AppTheme.textGrey)),
+                  )
+                : ListView.builder(
+                    itemCount: _filtered.length,
+                    itemBuilder: (_, i) {
+                      final item = _filtered[i];
+                      final isSelected = item.area == widget.selectedArea;
+                      if (item.isCity) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          child: Text(
+                            item.city,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        );
+                      }
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.location_on_outlined,
+                          size: 16,
+                          color: isSelected ? AppTheme.primary : Colors.grey.shade400,
+                        ),
+                        title: Text(
+                          item.area,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? AppTheme.primary : AppTheme.textDark,
+                          ),
+                        ),
+                        subtitle: Text(
+                          item.city,
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle, size: 16, color: AppTheme.primary)
+                            : null,
+                        onTap: () {
+                          widget.onSelected(item.area);
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AreaItem {
+  final String city;
+  final String area;
+  final bool isCity;
+  const _AreaItem({required this.city, required this.area, required this.isCity});
 }

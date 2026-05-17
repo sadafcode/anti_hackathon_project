@@ -136,6 +136,10 @@ export class NLUAgent {
       requires_clarification: raw.confidence < 0.6 || raw.requires_clarification === true,
 
       clarification_question: raw.clarification_question || null,
+      user_emotion: ['neutral','frustrated','angry','satisfied','confused'].includes(raw.user_emotion)
+        ? raw.user_emotion
+        : 'neutral',
+      past_date_error: raw.past_date_error === true,
     };
   }
 
@@ -180,6 +184,8 @@ export class NLUAgent {
       processing_time_ms: Date.now() - startTime,
       requires_clarification: true,
       clarification_question: 'Kya kaam karwana hai? Apni zaroorat batayein.',
+      user_emotion: 'neutral',
+      past_date_error: false,
     };
   }
 
@@ -206,6 +212,8 @@ export class NLUAgent {
       processing_time_ms: Date.now() - startTime,
       requires_clarification: true,
       clarification_question: 'Sorry, samajh nahi aa raha. Dobara batayein kya service chahiye?',
+      user_emotion: 'neutral',
+      past_date_error: false,
     };
   }
 }

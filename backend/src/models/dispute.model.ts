@@ -11,6 +11,7 @@ export interface DisputeInput {
   overcharged_amount?: number;
   extra_charge_amount?: number;
   hours_before_job?: number;
+  language_detected?: string;
 }
 
 export interface DisputeOutput {

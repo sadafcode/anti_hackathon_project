@@ -67,10 +67,12 @@ export interface NLUResult {
   intent: Intent;
   entities: NLUEntities;
   raw_input: string;
-  normalized: string; // Clean English/Roman Urdu summary of what was understood
+  normalized: string;
   processing_time_ms: number;
   requires_clarification: boolean;
   clarification_question: string | null;
+  user_emotion: 'neutral' | 'frustrated' | 'angry' | 'satisfied' | 'confused';
+  past_date_error: boolean;
 }
 
 export interface NLUAgentInput {

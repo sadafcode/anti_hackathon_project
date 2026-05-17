@@ -2,17 +2,26 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'firebase_options.dart';
 import 'services/firestore_service.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
-import 'screens/chat_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/booking_status_screen.dart';
+import 'screens/provider_notification_screen.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize push notifications
+  NotificationService.navigatorKey = navigatorKey;
+  await NotificationService.initialize();
+
   runApp(const KhidmatBotApp());
-  // Seed in background — don't block UI
-  FirestoreService.seedProviders().catchError((e) {
-    // ignore seed errors silently
-  });
+
+  // Seed providers in background
+  FirestoreService.seedProviders().catchError((_) {});
 }
 
 class KhidmatBotApp extends StatelessWidget {
@@ -24,7 +33,30 @@ class KhidmatBotApp extends StatelessWidget {
       title: 'KhidmatBot',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: const ChatScreen(),
+      navigatorKey: navigatorKey,
+      home: const HomeScreen(),
+      // Named routes for notification tap navigation
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/provider-notification':
+            final providerId = settings.arguments as String;
+            return MaterialPageRoute(
+              builder: (_) =>
+                  ProviderNotificationScreen(providerId: providerId),
+            );
+          case '/booking-status':
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(
+              builder: (_) => BookingStatusScreen(
+                bookingId: args['bookingId'] as String,
+                providerName: args['providerName'] as String,
+                serviceType: args['serviceType'] as String,
+              ),
+            );
+          default:
+            return null;
+        }
+      },
     );
   }
 }

@@ -1,12 +1,17 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android emulator to access localhost
-  // Or localhost for web/iOS simulator
-  static const String baseUrl = 'http://10.0.2.2:3000/api';
+  // kIsWeb = Chrome/web uses localhost; Android emulator uses 10.0.2.2
+  static String get baseUrl =>
+      kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
   static String sessionId = const Uuid().v4();
+
+  // Last discovered providers from discovery API — used for auto-reschedule on decline
+  static List<Map<String, dynamic>> lastDiscoveredProviders = [];
+  static Map<String, dynamic>? lastConfirmedIntent;
 
   static Future<Map<String, dynamic>> sendMessage(String message) async {
     final response = await http.post(
@@ -142,6 +147,13 @@ class ApiService {
     }
   }
 
+  static Future<void> applyPenalty(String providerId) async {
+    await http.post(
+      Uri.parse('$baseUrl/providers/$providerId/apply-penalty'),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
   static Future<Map<String, dynamic>> cancelAfterAccept(String bookingId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/booking/cancel-after-accept'),
@@ -153,6 +165,63 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to cancel booking: ${response.body}');
+    }
+  }
+
+  /// Submit a star rating + review for a provider after service completion.
+  /// This updates the provider's rating in providers.json on the backend.
+  static Future<Map<String, dynamic>> rateProvider({
+    required String providerId,
+    required String bookingId,
+    required int stars,
+    String reviewText = '',
+    String clientName = 'Anonymous',
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/providers/$providerId/rate'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'stars': stars,
+        'review_text': reviewText,
+        'client_name': clientName,
+        'booking_id': bookingId,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to submit rating: ${response.body}');
+    }
+  }
+
+  /// Save FCM token to backend (so backend can send push notifications)
+  static Future<void> saveNotificationToken({
+    required String token,
+    required String role,
+    required String id,
+  }) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/fcm/save-token'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'token': token, 'role': role, 'id': id}),
+      );
+    } catch (_) {}
+  }
+
+  /// Get booked time slots for a provider (to show availability in UI)
+  static Future<List<String>> getProviderBookedSlots(String providerId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/providers/$providerId/booked-slots'),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return List<String>.from(data['booked_slots'] ?? []);
+    } else {
+      throw Exception('Failed to get booked slots: ${response.body}');
     }
   }
 }

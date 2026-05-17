@@ -26,7 +26,7 @@ async function runTests() {
 
   // TEST 1
   console.log('─── Test 1: service=ac_repair, area=G-13 ───');
-  const res1 = agent.discover(createIntent('ac_repair', 'G-13'));
+  const res1 = await agent.discover(createIntent('ac_repair', 'G-13'));
   console.log(JSON.stringify(res1, null, 2));
   if (res1.status === 'success' && res1.ranked_providers[0].name === 'Ali Hassan') {
     console.log('  ✅ PASSED');
@@ -38,7 +38,7 @@ async function runTests() {
 
   // TEST 2
   console.log('\n─── Test 2: service=plumber, area=G-13 ───');
-  const res2 = agent.discover(createIntent('plumber', 'G-13'));
+  const res2 = await agent.discover(createIntent('plumber', 'G-13'));
   console.log(JSON.stringify(res2, null, 2));
   if (res2.status === 'success' && (res2.ranked_providers[0].name === 'Bilal Ahmed' || res2.ranked_providers[0].name === 'Aslam Khan')) {
     console.log('  ✅ PASSED');
@@ -50,7 +50,7 @@ async function runTests() {
 
   // TEST 3
   console.log('\n─── Test 3: service=ac_repair, area=F-10 (Zero direct matches) ───');
-  const res3 = agent.discover(createIntent('ac_repair', 'F-10'));
+  const res3 = await agent.discover(createIntent('ac_repair', 'F-10'));
   console.log(JSON.stringify(res3, null, 2));
   if (res3.status === 'success' && res3.ranked_providers.length > 0) {
     console.log('  ✅ PASSED');

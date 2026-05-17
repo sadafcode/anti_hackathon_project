@@ -1,0 +1,256 @@
+import { tool } from '@openai/agents';
+import { z } from 'zod';
+import fs from 'fs';
+import path from 'path';
+
+const DATA_PATH = path.resolve(__dirname, '../../data/providers.json');
+
+function readProviders(): any[] {
+  try {
+    return JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+
+function writeProviders(providers: any[]): void {
+  fs.writeFileSync(DATA_PATH, JSON.stringify(providers, null, 2));
+}
+
+const CITY_AREAS: Record<string, string[]> = {
+  islamabad: ['f-6','f-7','f-8','f-10','f-11','g-6','g-7','g-8','g-9','g-10','g-11','g-13','i-8','i-9','i-10','e-7','e-11','dha islamabad','bahria town islamabad','pwd','gulberg islamabad'],
+  rawalpindi: ['satellite town rawalpindi','chaklala','cantt rawalpindi','bahria town rawalpindi','dha rawalpindi','saddar rawalpindi'],
+  lahore: ['gulberg','dha lahore phase 1','dha lahore phase 5','model town','johar town','bahria town lahore','garden town','iqbal town','shadman'],
+  karachi: ['dha karachi','clifton','gulshan-e-iqbal','north nazimabad','pechs','bahria town karachi'],
+  peshawar: ['hayatabad','university town','cantt peshawar'],
+  quetta: ['satellite town quetta','cantt quetta','jinnah town'],
+};
+
+const NEIGHBORS: Record<string, string[]> = {
+  'g-11': ['g-13','g-10'],
+  'g-13': ['g-11','i-8','g-10'],
+  'g-10': ['g-11','g-13'],
+  'f-10': ['f-8'],
+  'f-8':  ['f-10','f-7'],
+  'f-7':  ['f-8'],
+  'i-8':  ['g-13'],
+};
+
+function resolveCity(area: string): string | null {
+  const a = area.toLowerCase().trim();
+  for (const [city, areas] of Object.entries(CITY_AREAS)) {
+    if (city === a || areas.includes(a)) return city;
+  }
+  return null;
+}
+
+function areasMatch(providerArea: string, requestedArea: string): boolean {
+  const pa = providerArea.toLowerCase().trim();
+  const ra = requestedArea.toLowerCase().trim();
+  if (pa === ra) return true;
+  const pc = resolveCity(pa);
+  const rc = resolveCity(ra);
+  if (pc && rc && pc === rc) return true;
+  return (NEIGHBORS[ra] || []).includes(pa);
+}
+
+export const searchProviders = tool({
+  name: 'search_providers',
+  description: 'Search providers from the database filtered by service type and area. Returns all matching available providers with their full profiles.',
+  parameters: z.object({
+    service_type: z.string().describe('Service type e.g. ac_repair, plumber, electrician'),
+    area: z.string().describe('Customer area/sector e.g. G-11, F-10, Gulberg'),
+    urgency: z.string().nullable().describe('low, medium, high, emergency — or null if not specified'),
+    budget_sensitive: z.boolean().nullable(),
+    job_complexity: z.string().nullable().describe('basic, intermediate, complex — or null if not specified'),
+  }),
+  execute: async ({ service_type, area, urgency, budget_sensitive, job_complexity }) => {
+    const providers = readProviders();
+
+    const byService = providers.filter((p: any) =>
+      (p.service_types || []).some((s: string) => s.toLowerCase() === service_type.toLowerCase())
+    );
+
+    if (byService.length === 0) {
+      return { found: 0, providers: [], message: `No ${service_type} providers registered on platform.` };
+    }
+
+    const nearby = byService.filter((p: any) => areasMatch(p.area, area));
+    const pool = nearby.length > 0 ? nearby : byService;
+
+    const available = pool.filter((p: any) =>
+      (p.capacity_today || 0) > 0 &&
+      !(p.risk_score === 'high' && (p.strikes || 0) >= 2)
+    );
+
+    return {
+      found: available.length,
+      total_in_area: nearby.length,
+      providers: available.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        photo_url: p.photo_url || null,
+        area: p.area,
+        service_types: p.service_types,
+        rating: p.rating || 0,
+        total_reviews: p.total_reviews || 0,
+        review_sentiment: p.review_sentiment || 'unrated',
+        experience_years: p.experience_years || 0,
+        on_time_score: p.on_time_score || 100,
+        cancellation_rate: p.cancellation_rate || 0,
+        hourly_rate: p.hourly_rate || 500,
+        capacity_today: p.capacity_today || 0,
+        blue_tick: p.blue_tick || false,
+        risk_score: p.risk_score || 'low',
+        strikes: p.strikes || 0,
+        certifications: p.certifications || [],
+        tools_available: p.tools_available || [],
+        user_preference_score: p.user_preference_score || 0,
+        availability: p.availability || {},
+        same_area: p.area.toLowerCase().trim() === area.toLowerCase().trim(),
+      })),
+      context: { urgency, budget_sensitive, job_complexity, requested_area: area },
+    };
+  },
+});
+
+export const getProviderById = tool({
+  name: 'get_provider_by_id',
+  description: 'Get a single provider profile by their ID.',
+  parameters: z.object({ provider_id: z.string() }),
+  execute: async ({ provider_id }) => {
+    const providers = readProviders();
+    const p = providers.find((x: any) => x.id === provider_id);
+    return p || null;
+  },
+});
+
+export const updateProviderRating = tool({
+  name: 'update_provider_rating',
+  description: 'Update provider rating after a completed job. Recalculates running average.',
+  parameters: z.object({
+    provider_id: z.string(),
+    new_stars: z.number().min(1).max(5),
+    arrived_on_time: z.boolean(),
+  }),
+  execute: async ({ provider_id, new_stars, arrived_on_time }) => {
+    const providers = readProviders();
+    const idx = providers.findIndex((p: any) => p.id === provider_id);
+    if (idx === -1) return { success: false, error: 'Provider not found' };
+
+    const old = providers[idx];
+    const oldTotal = old.total_reviews || 0;
+    const newTotal = oldTotal + 1;
+    const newRating = Number(((old.rating * oldTotal + new_stars) / newTotal).toFixed(2));
+
+    let sentiment = 'unrated';
+    if (newRating >= 4.5) sentiment = 'positive';
+    else if (newRating >= 3.5) sentiment = 'mostly_positive';
+    else if (newRating >= 2.5) sentiment = 'mixed';
+    else sentiment = 'negative';
+
+    providers[idx].rating = newRating;
+    providers[idx].total_reviews = newTotal;
+    providers[idx].review_sentiment = sentiment;
+    if (!arrived_on_time) {
+      providers[idx].on_time_score = Math.max(0, (providers[idx].on_time_score || 100) - 2);
+    }
+
+    writeProviders(providers);
+    return { success: true, new_rating: newRating, total_reviews: newTotal, review_sentiment: sentiment };
+  },
+});
+
+export const applyProviderPenalty = tool({
+  name: 'apply_provider_penalty',
+  description: 'Apply cancellation penalty to provider. Increases cancellation_rate and decreases on_time_score.',
+  parameters: z.object({ provider_id: z.string() }),
+  execute: async ({ provider_id }) => {
+    const providers = readProviders();
+    const idx = providers.findIndex((p: any) => p.id === provider_id);
+    if (idx === -1) return { success: false };
+
+    providers[idx].cancellation_rate = (providers[idx].cancellation_rate || 0) + 1;
+    providers[idx].on_time_score = Math.max(0, (providers[idx].on_time_score || 100) - 10);
+    writeProviders(providers);
+
+    return {
+      success: true,
+      new_cancellation_rate: providers[idx].cancellation_rate,
+      new_on_time_score: providers[idx].on_time_score,
+    };
+  },
+});
+
+export const applyProviderStrike = tool({
+  name: 'apply_provider_strike',
+  description: 'Add a dispute strike to a provider. 3 strikes causes blacklist with high risk_score.',
+  parameters: z.object({ provider_id: z.string() }),
+  execute: async ({ provider_id }) => {
+    const providers = readProviders();
+    const idx = providers.findIndex((p: any) => p.id === provider_id);
+    if (idx === -1) return { success: false, strikes: 0, blacklisted: false };
+
+    providers[idx].strikes = (providers[idx].strikes || 0) + 1;
+    const strikes = providers[idx].strikes;
+    const blacklisted = strikes >= 3;
+    if (blacklisted) providers[idx].risk_score = 'high';
+
+    writeProviders(providers);
+    return { success: true, strikes, blacklisted, provider_name: providers[idx].name };
+  },
+});
+
+export const registerNewProvider = tool({
+  name: 'register_new_provider',
+  description: 'Register a new service provider on the platform.',
+  parameters: z.object({
+    name: z.string(),
+    service_types: z.array(z.string()),
+    area: z.string(),
+    hourly_rate: z.number(),
+    experience_years: z.number(),
+    nic: z.string().nullable(),
+    availability: z.record(z.string(), z.array(z.string())).nullable(),
+  }),
+  execute: async ({ name, service_types, area, hourly_rate, experience_years, nic, availability }) => {
+    const providers = readProviders();
+
+    // Simple mock NADRA check
+    let blue_tick = false;
+    let nadra_status = 'no_nic';
+    if (nic) {
+      const clean = nic.replace(/[-\s]/g, '');
+      if (clean.length !== 13 || !/^\d+$/.test(clean)) {
+        nadra_status = 'format_invalid';
+      } else {
+        // Mock: NICs ending in odd digit = verified
+        blue_tick = parseInt(clean[12]) % 2 !== 0;
+        nadra_status = blue_tick ? 'mock_verified' : 'mock_rejected';
+      }
+    }
+
+    const newProvider = {
+      id: 'PRV-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+      name, area, service_types, hourly_rate, experience_years, blue_tick,
+      rating: 0, total_reviews: 0, review_sentiment: 'unrated',
+      on_time_score: 100, cancellation_rate: 0, capacity_today: 3,
+      risk_score: 'low', strikes: 0, user_preference_score: 0,
+      registered_at: new Date().toISOString(),
+      availability: availability || {
+        monday: ['09:00','11:00','14:00','16:00'],
+        tuesday: ['09:00','11:00','14:00','16:00'],
+        wednesday: ['09:00','11:00','14:00','16:00'],
+        thursday: ['09:00','11:00','14:00','16:00'],
+        friday: ['09:00','11:00','14:00'],
+        saturday: ['10:00','12:00'],
+        sunday: [],
+      },
+    };
+
+    providers.push(newProvider);
+    writeProviders(providers);
+
+    return { status: 'success', provider: newProvider, nadra_status };
+  },
+});

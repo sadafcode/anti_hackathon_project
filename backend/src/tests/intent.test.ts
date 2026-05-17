@@ -22,6 +22,8 @@ function createMockNLUResult(overrides: Partial<NLUResult>): NLUResult {
     processing_time_ms: 10,
     requires_clarification: false,
     clarification_question: null,
+    user_emotion: 'neutral',
+    past_date_error: false,
     ...overrides,
     entities: {
       ...defaultEntities,

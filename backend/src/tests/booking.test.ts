@@ -36,7 +36,7 @@ async function runTests() {
     job_complexity: 'basic', confidence: 95, language_detected: 'english'
   };
   const provider1 = getProvider('p3'); // Bilal Ahmed
-  const pricing1 = pricingAgent.calculatePrice({ provider: provider1, intent: intent1, is_returning_user: false });
+  const pricing1 = await pricingAgent.calculatePrice({ provider: provider1, intent: intent1, is_returning_user: false });
 
   // ─────────────────────────────────────────────────────────────────
   console.log('─── Flow 1: Normal Booking (Accept) ───');
@@ -52,7 +52,7 @@ async function runTests() {
   // ─────────────────────────────────────────────────────────────────
   console.log('\n─── Flow 2: Conflict (Double Booking) ───');
   const intent2: ConfirmedIntent = { ...intent1, datetime: '2026-05-15T11:00:00' }; // 60 mins later, within 75 min buffer
-  const pricing2 = pricingAgent.calculatePrice({ provider: provider1, intent: intent2, is_returning_user: false });
+  const pricing2 = await pricingAgent.calculatePrice({ provider: provider1, intent: intent2, is_returning_user: false });
   const res2 = await agent.bookService({
     intent: intent2,
     provider: provider1,
@@ -71,7 +71,7 @@ async function runTests() {
   // Save initial stats to compare later
   const initUsman = getProvider('p4');
 
-  const pricing3 = pricingAgent.calculatePrice({ provider: provider4, intent: intent3, is_returning_user: false });
+  const pricing3 = await pricingAgent.calculatePrice({ provider: provider4, intent: intent3, is_returning_user: false });
   
   // 1. Initial Accept
   const res3 = await agent.bookService({
@@ -94,11 +94,11 @@ async function runTests() {
   const updatedUsman = getProvider('p4');
   console.log(`\nVerification Check for ${updatedUsman.name}:`);
   console.log(`Cancellation Rate: ${initUsman.cancellation_rate} ➔ ${updatedUsman.cancellation_rate}`);
-  console.log(`Reliability Score: ${initUsman.reliability_score} ➔ ${updatedUsman.reliability_score}`);
+  console.log(`On-time Score: ${initUsman.on_time_score} ➔ ${updatedUsman.on_time_score}`);
 
   if (
     updatedUsman.cancellation_rate === initUsman.cancellation_rate + 1 &&
-    updatedUsman.reliability_score === initUsman.reliability_score - 10
+    updatedUsman.on_time_score === initUsman.on_time_score - 10
   ) {
     console.log('✅ Penalty accurately applied to providers.json!');
   } else {

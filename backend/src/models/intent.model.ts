@@ -3,6 +3,7 @@ import { NLUResult, ServiceType, NLULocation, Urgency } from './nlu.model';
 export interface IntentAgentInput {
   nlu_result: NLUResult;
   session_id: string;
+  raw_message?: string;
 }
 
 export interface PartialIntent {

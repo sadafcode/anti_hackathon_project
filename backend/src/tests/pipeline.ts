@@ -33,8 +33,8 @@ async function runPipeline() {
   // 3. Discovery Agent (Ranking)
   console.log('\n[3] Running Discovery & Ranking Agent...');
   const discoveryAgent = new DiscoveryAgent();
-  const discoveryResult = discoveryAgent.discover(intentState.confirmed_intent!);
-  const rankedProviders = discoveryResult.ranked_providers || [];
+  const discoveryResult = await discoveryAgent.discover(intentState.confirmed_intent!);
+  const rankedProviders = discoveryResult.status === 'success' ? discoveryResult.ranked_providers : [];
 
   console.log('\n--- RANKING RESULTS ---');
   for (const p of rankedProviders) {
@@ -54,7 +54,7 @@ async function runPipeline() {
   // 4. Pricing Agent
   console.log('\n[4] Running Pricing Agent...');
   const pricingAgent = new PricingAgent();
-  const pricingResult = pricingAgent.calculatePrice({
+  const pricingResult = await pricingAgent.calculatePrice({
     provider: topProvider,
     intent: intentState.confirmed_intent!,
     is_returning_user: false

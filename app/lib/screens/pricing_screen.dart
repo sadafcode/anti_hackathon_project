@@ -4,7 +4,8 @@ import '../models/pricing_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 import '../services/api_service.dart';
-import 'booking_confirmation_screen.dart';
+import '../services/booking_firestore_service.dart';
+import 'booking_waiting_screen.dart';
 
 class PricingScreen extends StatelessWidget {
   final ProviderModel provider;
@@ -489,59 +490,275 @@ class PricingScreen extends StatelessWidget {
   }
 
   void _acceptPrice(BuildContext context) async {
-    
-    // Quick local state update trick for stateless widget: 
-    // We can't setState, so we'll show a loading dialog instead
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
+      final requestedDatetime =
+          DateTime.now().add(const Duration(days: 1)).toIso8601String();
       final mockIntent = {
-        'service_type': provider.serviceTypes.isNotEmpty ? provider.serviceTypes.first : 'other',
+        'service_type': provider.serviceTypes.isNotEmpty
+            ? provider.serviceTypes.first
+            : 'other',
         'location': {'area': provider.area, 'city': 'Islamabad'},
-        'datetime': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+        'datetime': requestedDatetime,
         'urgency': 'medium',
         'budget_sensitive': false,
         'job_complexity': 'basic'
       };
-      
+
       final req = {
         'provider': provider.toJson(),
         'intent': mockIntent,
-        'pricing': {
-           'base_rate': pricing.baseRate,
-           'total': pricing.total,
-        },
+        'pricing': {'base_rate': pricing.baseRate, 'total': pricing.total},
         'mock_action': 'accept'
       };
-      
+
       final response = await ApiService.createBooking(req);
-      final providerId = response['provider_id'];
-      final bookingId = response['booking_id'];
-      
-      if (context.mounted) {
-        Navigator.pop(context); // close dialog
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => BookingConfirmationScreen(
-              provider: provider,
-              pricing: pricing,
-              providerId: providerId,
-              bookingId: bookingId,
-            ),
-          ),
-        );
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // close loading
+
+      if (response['status'] == 'conflict_waitlist') {
+        _showConflictDialog(context, response);
+        return;
       }
+
+      final providerId = response['provider_id'] as String? ?? '';
+      final bookingId = response['booking_id'] as String? ?? '';
+
+      // Save to Firestore
+      if (providerId.isNotEmpty && bookingId.isNotEmpty) {
+        try {
+          await BookingFirestoreService.createBooking(
+            bookingId: bookingId,
+            providerId: providerId,
+            providerName: provider.name,
+            serviceType: provider.serviceTypes.isNotEmpty
+                ? provider.serviceTypes.first
+                : 'service',
+            area: provider.area,
+            amount: pricing.total,
+            datetime: requestedDatetime,
+          );
+        } catch (_) {}
+      }
+
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingWaitingScreen(
+            bookingId: bookingId,
+            providerId: providerId,
+            provider: provider,
+            pricing: pricing,
+          ),
+        ),
+      );
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
+  }
+
+  void _showConflictDialog(
+      BuildContext context, Map<String, dynamic> response) {
+    final conflict = response['conflict_info'] as Map<String, dynamic>?;
+    final providerName = response['provider_name'] ?? provider.name;
+    final nextSlot =
+        conflict?['next_available_slot'] ?? 'Schedule maloom nahi';
+    final matchExplanation = conflict?['perfect_match_explanation'] ?? '';
+    final secondBest = conflict?['second_best_provider'] as Map<String, dynamic>?;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.event_busy, color: Colors.orange.shade700, size: 22),
+            const SizedBox(width: 8),
+            const Flexible(
+              child: Text(
+                'Yeh slot booked hai',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Why perfect match
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade100),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.star, color: Colors.blue.shade700, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Kiyun $providerName perfect match tha:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      matchExplanation,
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.blue.shade900, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Next available slot
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today,
+                        color: Colors.green.shade700, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$providerName ka agla free slot:',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green.shade800),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            nextSlot,
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.green.shade900),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Second best provider
+              if (secondBest != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.person_search,
+                              color: Colors.amber.shade800, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Apne time par chahiye? Doosra best option:',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.amber.shade900),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${secondBest['name']} — ${secondBest['area']}',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.amber.shade900),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Rating: ${(secondBest['rating'] ?? 0).toStringAsFixed(1)}/5 • ${secondBest['on_time_score']}% on-time • Rs. ${secondBest['hourly_rate']}/hr',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.amber.shade800),
+                      ),
+                      if ((secondBest['ranking_reason'] ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          secondBest['ranking_reason'],
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.amber.shade900,
+                              height: 1.4),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Theek Hai'),
+          ),
+          if (secondBest != null)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        '${secondBest['name']} ko book karne ke liye wapas jayen'),
+                    backgroundColor: Colors.amber.shade700,
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber.shade700,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Doosra Choose Karo',
+                  style: TextStyle(color: Colors.white)),
+            ),
+        ],
+      ),
+    );
   }
 
   void _confirmBudgetOption(BuildContext context) async {
@@ -594,28 +811,54 @@ class PricingScreen extends StatelessWidget {
       };
       
       final response = await ApiService.createBooking(req);
-      final providerId = response['provider_id'];
-      final bookingId = response['booking_id'];
-      
-      if (context.mounted) {
-        Navigator.pop(context); // close dialog
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => BookingConfirmationScreen(
-              provider: provider,
-              pricing: budgetPricing,
-              isBudgetOption: true,
-              providerId: providerId,
-              bookingId: bookingId,
-            ),
-          ),
-        );
+
+      if (!context.mounted) return;
+      Navigator.pop(context);
+
+      if (response['status'] == 'conflict_waitlist') {
+        _showConflictDialog(context, response);
+        return;
       }
+
+      final providerId = response['provider_id'] as String? ?? '';
+      final bookingId = response['booking_id'] as String? ?? '';
+
+      if (providerId.isNotEmpty && bookingId.isNotEmpty) {
+        try {
+          await BookingFirestoreService.createBooking(
+            bookingId: bookingId,
+            providerId: providerId,
+            providerName: provider.name,
+            serviceType: provider.serviceTypes.isNotEmpty
+                ? provider.serviceTypes.first
+                : 'service',
+            area: provider.area,
+            amount: budgetPricing.total,
+            datetime: DateTime.now()
+                .add(const Duration(days: 1))
+                .toIso8601String(),
+          );
+        } catch (_) {}
+      }
+
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingWaitingScreen(
+            bookingId: bookingId,
+            providerId: providerId,
+            provider: provider,
+            pricing: budgetPricing,
+            isBudgetOption: true,
+          ),
+        ),
+      );
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }

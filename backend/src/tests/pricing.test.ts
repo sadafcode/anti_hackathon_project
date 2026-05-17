@@ -5,7 +5,7 @@ import { RankedProvider } from '../models/discovery.model';
 const agent = new PricingAgent();
 
 function createIntent(
-  service_type: string,
+  service_type: any,
   area: string,
   datetime: string,
   urgency: any,

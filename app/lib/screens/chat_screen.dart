@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/message.dart';
-import '../services/firestore_service.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
@@ -8,6 +7,8 @@ import '../widgets/provider_card_bubble.dart';
 import '../widgets/reasoning_panel.dart';
 import '../widgets/typing_indicator.dart';
 import 'map_picker_screen.dart';
+import 'agent_trace_screen.dart';
+import 'baseline_comparison_screen.dart';
 import '../services/api_service.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -26,20 +27,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   List<ProviderModel>? _currentProviders;
   int _currentProviderIndex = 0;
-  List<ProviderModel> _cachedProviders = [];
+
+  // Traces collected from backend during the last full pipeline run
+  final List<Map<String, dynamic>> _collectedTraces = [];
+  String _lastUserMessage = '';
 
   @override
   void initState() {
     super.initState();
     _addWelcomeMessage();
-    _preloadProviders();
-  }
-
-  Future<void> _preloadProviders() async {
-    try {
-      final all = await FirestoreService.fetchProviders();
-      if (mounted) setState(() => _cachedProviders = all);
-    } catch (_) {}
   }
 
   void _addWelcomeMessage() {
@@ -50,71 +46,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  String? _detectServiceType(String text) {
-    final lower = text.toLowerCase();
-    if (lower.contains('ac') || lower.contains('technician')) return 'ac_repair';
-    if (lower.contains('plumber') || lower.contains('plumbing')) return 'plumber';
-    if (lower.contains('electrician') || lower.contains('bijli')) return 'electrician';
-    if (lower.contains('carpenter') || lower.contains('carpent')) return 'carpenter';
-    if (lower.contains('tutor') || lower.contains('teacher') || lower.contains('teacher')) return 'tutor';
-    if (lower.contains('driver')) return 'driver';
-    if (lower.contains('mechanic')) return 'mechanic';
-    return null;
-  }
-
-  String _detectLocation(String text) {
-    final lower = text.toLowerCase();
-    final patterns = {
-      'G-17': ['g-17', 'g17'],
-      'G-13': ['g-13', 'g13'],
-      'G-11': ['g-11', 'g11'],
-      'F-10': ['f-10', 'f10'],
-      'F-8': ['f-8', 'f8'],
-      'I-8': ['i-8', 'i8'],
-      'Gulshan': ['gulshan'],
-      'Islamabad': ['islamabad'],
-    };
-    for (final entry in patterns.entries) {
-      if (entry.value.any((p) => lower.contains(p))) return entry.key;
-    }
-    return 'aapke area';
-  }
-
-  bool _isCompleteRequest(String text) {
-    if (_detectServiceType(text) == null) return false;
-    final lower = text.toLowerCase();
-    return lower.contains('g-') ||
-        lower.contains('f-') ||
-        lower.contains('h-') ||
-        lower.contains('i-') ||
-        lower.contains('gulshan') ||
-        lower.contains('islamabad') ||
-        lower.contains('kal') ||
-        lower.contains('aaj') ||
-        lower.contains('subah') ||
-        lower.contains('sham') ||
-        lower.contains('block') ||
-        lower.contains('sector') ||
-        lower.contains('mein') ||
-        lower.contains('may') ||
-        lower.contains('me ');
-  }
-
-  String _getMockReply(String text) {
-    final serviceType = _detectServiceType(text);
-    if (serviceType != null) {
-      return 'Samajh gaya. Kaunse area mein chahiye aur kab? Area aur time batayein.';
-    }
-    final lower = text.toLowerCase();
-    if (lower.contains('kal') || lower.contains('aaj')) {
-      return 'Theek hai. Kaunsi service chahiye? (AC, plumber, electrician, etc.)';
-    }
-    if (lower.contains('budget') || lower.contains('sasta') || lower.contains('kam')) {
-      return 'Budget ka khayal rakhunga. Kaunsi service chahiye aur kahan?';
-    }
-    return 'Samajh gaya. Aur thodi detail batayein — kya kaam hai aur kahan?';
-  }
-
   void _sendMessage() async {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
@@ -123,11 +54,26 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.add(Message.user(text));
       _inputController.clear();
       _isTyping = true;
+      _lastUserMessage = text;
+      _collectedTraces.clear();
     });
     _scrollToBottom();
 
     try {
       final response = await ApiService.sendMessage(text);
+
+      // Collect NLU + Intent traces
+      final traces = response['_traces'] as Map<String, dynamic>?;
+      if (traces != null) {
+        if (traces['nlu'] != null) {
+          _collectedTraces.add(Map<String, dynamic>.from(traces['nlu'] as Map));
+        }
+        if (traces['intent'] != null) {
+          _collectedTraces
+              .add(Map<String, dynamic>.from(traces['intent'] as Map));
+        }
+      }
+
       final intentStatus = response['intent']['status'];
       
       if (intentStatus == 'incomplete') {
@@ -139,27 +85,60 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       } else if (intentStatus == 'complete') {
         final confirmedIntent = response['intent']['confirmed_intent'];
-        
+        final lang = response['nlu']?['language_detected'] ?? 'roman_urdu';
+        String searchMsg;
+        if (lang == 'english') {
+          searchMsg = 'Got it! Searching for the best providers for you...';
+        } else if (lang == 'urdu') {
+          searchMsg = 'سمجھ گیا۔ آپ کے لیے بہترین providers تلاش کر رہا ہوں...';
+        } else {
+          searchMsg = 'Samajh gaya. Aap ke liye best providers dhundh raha hoon...';
+        }
+
         setState(() {
           _isTyping = false;
-          _messages.add(Message.agent('Samajh gaya. Searching for the best providers...'));
+          _messages.add(Message.agent(searchMsg));
           _isTyping = true;
         });
         _scrollToBottom();
 
         // Trigger discovery
         final discoveryResp = await ApiService.discoverProviders(confirmedIntent);
-        
+
+        // Collect discovery trace
+        final discTrace = discoveryResp['_trace'] as Map<String, dynamic>?;
+        if (discTrace != null) {
+          _collectedTraces.add(Map<String, dynamic>.from(discTrace));
+        }
+
         if (discoveryResp['status'] == 'no_providers') {
            setState(() {
               _isTyping = false;
               _messages.add(Message.agent(discoveryResp['message'] ?? 'Is area mein abhi koi provider available nahi.'));
            });
            _scrollToBottom();
+
+           // If backend suggests an alternative provider, show their card directly
+           if (discoveryResp['suggested_provider'] != null) {
+             final suggested = ProviderModel.fromJson(
+               Map<String, dynamic>.from(discoveryResp['suggested_provider'])
+             );
+             setState(() {
+               _currentProviders = [suggested];
+               _currentProviderIndex = 0;
+               _messages.add(Message.providerCard(suggested, requestedDatetime: confirmedIntent['datetime'] as String?));
+             });
+             _scrollToBottom();
+           }
         } else {
-           // Parse providers
+           // Parse providers — also cache raw JSON for auto-reschedule
            final providersJson = discoveryResp['ranked_providers'] as List;
            final providers = providersJson.map((p) => ProviderModel.fromJson(p)).toList();
+           ApiService.lastDiscoveredProviders = providersJson
+               .map((p) => Map<String, dynamic>.from(p as Map))
+               .toList();
+           ApiService.lastConfirmedIntent =
+               Map<String, dynamic>.from(confirmedIntent as Map);
            
            setState(() {
               _isTyping = false;
@@ -168,10 +147,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 locationHint: confirmedIntent['location']['area'],
                 topProvider: providers.first,
               ));
-              _messages.add(Message.providerCard(providers.first));
+              _messages.add(Message.providerCard(providers.first, requestedDatetime: confirmedIntent['datetime'] as String?));
            });
            _scrollToBottom();
-           
+
            _currentProviders = providers;
            _currentProviderIndex = 0;
            
@@ -206,7 +185,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final next = _currentProviders![_currentProviderIndex];
     setState(() {
       _messages.add(Message.agent('Dosra option:'));
-      _messages.add(Message.providerCard(next));
+      _messages.add(Message.providerCard(next, requestedDatetime: ApiService.lastConfirmedIntent?['datetime'] as String?));
     });
     _scrollToBottom();
   }
@@ -287,8 +266,35 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onPressed: () {},
+            tooltip: 'Agent Trace',
+            icon: const Icon(Icons.account_tree_outlined, color: Colors.white),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AgentTraceScreen(
+                  userMessage: _lastUserMessage.isNotEmpty
+                      ? _lastUserMessage
+                      : (_messages.isNotEmpty
+                          ? (_messages.firstWhere(
+                              (m) => m.type == MessageType.user,
+                              orElse: () => _messages.first,
+                            ).text)
+                          : 'AC bilkul kaam nahi kar raha, kal subah G-13 mein technician chahiye'),
+                  liveTraces:
+                      _collectedTraces.isNotEmpty ? List.from(_collectedTraces) : null,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Baseline Comparison',
+            icon: const Icon(Icons.compare_arrows_rounded, color: Colors.white),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BaselineComparisonScreen(),
+              ),
+            ),
           ),
         ],
       ),
@@ -318,6 +324,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     return ProviderCardBubble(
                       provider: msg.provider!,
                       onShowAlternative: _showNextProvider,
+                      requestedDatetime: msg.requestedDatetime,
                     );
                 }
               },

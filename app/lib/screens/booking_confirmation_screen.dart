@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/provider_model.dart';
 import '../models/pricing_model.dart';
+import '../services/booking_firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
+import 'booking_status_screen.dart';
 import 'provider_notification_screen.dart';
 
 class BookingConfirmationScreen extends StatefulWidget {
@@ -61,6 +63,44 @@ class _BookingConfirmationScreenState
       curve: Curves.elasticOut,
     );
     _checkController.forward();
+    _saveToFirestore();
+  }
+
+  Future<void> _saveToFirestore() async {
+    if (widget.providerId == null || widget.providerId!.isEmpty) return;
+    try {
+      final serviceType = widget.provider.serviceTypes.isNotEmpty
+          ? widget.provider.serviceTypes.first
+          : 'service';
+      // Use atomic creation to prevent double booking
+      final result = await BookingFirestoreService.createBookingAtomically(
+        bookingId: widget.bookingId,
+        providerId: widget.providerId!,
+        providerName: widget.provider.name,
+        serviceType: serviceType,
+        area: widget.provider.area,
+        amount: widget.pricing.total,
+        datetime: _appointmentTime.toIso8601String(),
+      );
+      if (result == null) {
+        // Slot was taken by another client between discovery and booking
+        debugPrint('Slot conflict detected — provider already booked at this time');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Yeh slot abhi kisi ne book kar liya! Alag waqt chunein.',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Firestore booking save error: $e');
+    }
   }
 
   @override
@@ -110,6 +150,8 @@ class _BookingConfirmationScreenState
             const SizedBox(height: 28),
             _buildHomeButton(context),
             const SizedBox(height: 12),
+            _buildStatusButton(context),
+            const SizedBox(height: 8),
             if (widget.providerId != null) _buildProviderDemoButton(context),
             const SizedBox(height: 16),
           ],
@@ -459,6 +501,45 @@ class _BookingConfirmationScreenState
             fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusButton(BuildContext context) {
+    final serviceType = widget.provider.serviceTypes.isNotEmpty
+        ? widget.provider.serviceTypes.first
+        : 'service';
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => BookingStatusScreen(
+                bookingId: widget.bookingId,
+                providerName: widget.provider.name,
+                serviceType: serviceType,
+              ),
+            ),
+          );
+        },
+        icon: const Icon(Icons.live_tv_outlined, color: Colors.white, size: 18),
+        label: const Text(
+          'Live Status Dekhein',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green.shade600,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          elevation: 0,
         ),
       ),
     );

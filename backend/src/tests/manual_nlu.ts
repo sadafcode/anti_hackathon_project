@@ -16,7 +16,7 @@ async function run() {
       language_detected: result.language_detected,
       confidence: result.confidence,
       normalized: result.normalized,
-      needs_confirmation: result.needs_confirmation,
+      requires_clarification: result.requires_clarification,
       full_output: result
     }, null, 2));
   } catch (error) {

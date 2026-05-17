@@ -50,7 +50,7 @@ async function runTests() {
   } as any;
   const intent1 = intentAgent.process({ nlu_result: nlu1, session_id: 't1' });
   if (intent1.confirmed_intent) {
-    const discovery1 = discoveryAgent.discover(intent1.confirmed_intent);
+    const discovery1 = await discoveryAgent.discover(intent1.confirmed_intent);
     if (discovery1.status === 'success') {
       console.log(`Output: Ranked Providers Found: ${discovery1.ranked_providers.length}`);
       if (discovery1.ranked_providers.length === 0) {
@@ -91,10 +91,10 @@ async function runTests() {
   } as any;
   const intent2 = intentAgent.process({ nlu_result: nlu2, session_id: 't2' });
   if (intent2.confirmed_intent) {
-    const discovery2 = discoveryAgent.discover(intent2.confirmed_intent);
+    const discovery2 = await discoveryAgent.discover(intent2.confirmed_intent);
     if (discovery2.status === 'success' && discovery2.ranked_providers.length > 0) {
       const p1 = discovery2.ranked_providers[0];
-      const price2 = pricingAgent.calculatePrice({ provider: p1, intent: intent2.confirmed_intent, is_returning_user: false });
+      const price2 = await pricingAgent.calculatePrice({ provider: p1, intent: intent2.confirmed_intent, is_returning_user: false });
       
       const bReq = {
         intent: intent2.confirmed_intent,
@@ -181,12 +181,12 @@ async function runTests() {
   if(intent4b.confirmed_intent) intent4b.confirmed_intent.datetime = new Date(tomorrow.setHours(10, 15, 0, 0)).toISOString();
 
   if (intent4a.confirmed_intent && intent4b.confirmed_intent) {
-    const disc4a = discoveryAgent.discover(intent4a.confirmed_intent);
+    const disc4a = await discoveryAgent.discover(intent4a.confirmed_intent);
     if (disc4a.status === 'success') {
       const p4 = disc4a.ranked_providers.find((p: any) => p.id === 'p2'); // Tariq Mehmood
-      
+
       if (p4) {
-        const price4 = pricingAgent.calculatePrice({ provider: p4, intent: intent4a.confirmed_intent, is_returning_user: false });
+        const price4 = await pricingAgent.calculatePrice({ provider: p4, intent: intent4a.confirmed_intent, is_returning_user: false });
         
         const bResA = await bookingAgent.bookService({
           intent: intent4a.confirmed_intent,
@@ -221,7 +221,7 @@ async function runTests() {
     customer_notes: "He charged me 1800 instead of 1500"
   };
   console.log(`Input: ${JSON.stringify(disputeInput)}`);
-  const disputeResult = disputeAgent.resolveDispute(disputeInput);
+  const disputeResult = await disputeAgent.resolveDispute(disputeInput);
   console.log(`Output: Resolution: "${disputeResult.resolution}"`);
   console.log(`Result: Refund of Rs. ${disputeResult.refund_amount} issued.`);
 
@@ -251,7 +251,7 @@ async function runTests() {
   } as any;
   const intent6 = intentAgent.process({ nlu_result: nlu6, session_id: 't6' });
   if (intent6.confirmed_intent) {
-    const disc6 = discoveryAgent.discover(intent6.confirmed_intent);
+    const disc6 = await discoveryAgent.discover(intent6.confirmed_intent);
     if (disc6.status === 'success') {
       const p6 = disc6.ranked_providers.find((p: any) => p.id === 'p4'); // Usman Ali
       if (p6) {

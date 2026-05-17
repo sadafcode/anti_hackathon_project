@@ -13,7 +13,7 @@ export interface Provider {
   on_time_score: number;
   experience_years: number;
   total_reviews: number;
-  review_sentiment: 'positive' | 'mostly_positive' | 'mixed' | 'negative';
+  review_sentiment: 'positive' | 'mostly_positive' | 'mixed' | 'negative' | 'unrated';
   certifications?: string[];
   tools_available?: string[];
   hourly_rate: number;
@@ -23,6 +23,14 @@ export interface Provider {
   blue_tick: boolean;
   is_mock?: boolean;
   registered_at?: string;
+}
+
+export interface ConflictInfo {
+  reason: string;
+  perfect_match_explanation: string;
+  next_available_slot: string;
+  next_available_datetime: string;
+  second_best_provider: RankedProvider | null;
 }
 
 export interface ScoreBreakdown {
@@ -45,9 +53,10 @@ export interface RankedProvider extends Provider {
   calculated_score: number;
   score_breakdown: ScoreBreakdown;
   ranking_reason: string;
+  booking_conflict?: ConflictInfo;
 }
 
-export type DiscoveryAgentOutput = 
+export type DiscoveryAgentOutput =
   | {
       status: 'success';
       total_found: number;
@@ -59,4 +68,5 @@ export type DiscoveryAgentOutput =
       suggestion: 'next_available' | 'waitlist';
       next_available_slot: string | null;
       message: string;
+      suggested_provider?: RankedProvider;
     };

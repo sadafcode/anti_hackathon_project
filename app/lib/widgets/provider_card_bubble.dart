@@ -10,11 +10,13 @@ import 'provider_avatar.dart';
 class ProviderCardBubble extends StatefulWidget {
   final ProviderModel provider;
   final VoidCallback? onShowAlternative;
+  final String? requestedDatetime; // ISO datetime to check day availability
 
   const ProviderCardBubble({
     super.key,
     required this.provider,
     this.onShowAlternative,
+    this.requestedDatetime,
   });
 
   @override
@@ -23,6 +25,27 @@ class ProviderCardBubble extends StatefulWidget {
 
 class _ProviderCardBubbleState extends State<ProviderCardBubble> {
   bool _reasoningExpanded = false;
+
+  static const _dayNames = [
+    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'
+  ];
+  static const _dayLabels = [
+    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+  ];
+
+  /// Returns the requested weekday name (lowercase) if the provider is NOT
+  /// available that day, otherwise null.
+  String? get _unavailableDay {
+    final dt = widget.requestedDatetime;
+    if (dt == null) return null;
+    try {
+      final parsed = DateTime.parse(dt);
+      final dayName = _dayNames[parsed.weekday % 7]; // DateTime.weekday: 1=Mon..7=Sun
+      final slots = widget.provider.availability[dayName];
+      if (slots == null || slots.isEmpty) return _dayLabels[parsed.weekday % 7];
+    } catch (_) {}
+    return null;
+  }
 
   void _openProfile() {
     Navigator.push(
@@ -104,6 +127,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
             _buildHeader(p),
             _buildInfoRow(p),
             _buildReasoningTile(p),
+            if (_unavailableDay != null) _buildDayUnavailableBanner(_unavailableDay!),
             if (p.hasStrike) _buildStrikeBanner(p),
             _buildButtons(p),
           ],
@@ -148,10 +172,12 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  _buildStarRow(p.rating),
+                  _buildStarRow(p.rating, p.reviewSentiment),
                   const SizedBox(height: 2),
                   Text(
-                    '${p.totalReviews} reviews  •  ${p.experienceYears} saal ka tajurba',
+                    p.totalReviews == 0
+                        ? '${p.experienceYears} saal ka tajurba'
+                        : '${p.totalReviews} reviews  •  ${p.experienceYears} saal ka tajurba',
                     style: const TextStyle(fontSize: 11, color: Color(0xFF999999)),
                   ),
                 ],
@@ -178,7 +204,21 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     );
   }
 
-  Widget _buildStarRow(double rating) {
+  Widget _buildStarRow(double rating, String reviewSentiment) {
+    if (rating == 0 || reviewSentiment == 'unrated') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ...List.generate(5, (_) =>
+              const Icon(Icons.star_border, color: Colors.grey, size: 15)),
+          const SizedBox(width: 4),
+          const Text(
+            'Nayi registration',
+            style: TextStyle(fontSize: 11, color: Color(0xFF999999)),
+          ),
+        ],
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -282,6 +322,30 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
           ),
         Divider(height: 1, color: Colors.grey.shade100),
       ],
+    );
+  }
+
+  Widget _buildDayUnavailableBanner(String dayLabel) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.shade300),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.event_busy_outlined, color: Colors.amber.shade700, size: 15),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '$dayLabel ko available nahi — koi aur din chunein',
+              style: TextStyle(fontSize: 11, color: Colors.amber.shade800, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

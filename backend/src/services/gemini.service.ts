@@ -23,10 +23,10 @@ export class GeminiService {
     this.model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       generationConfig: {
-        temperature: 0.1,        // Low temperature for consistent structured output
+        temperature: 0.1,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
       },
     });
   }
@@ -63,7 +63,7 @@ export class GeminiService {
   async generateJSON<T>(prompt: string): Promise<T> {
     const rawText = await this.generateText(prompt);
 
-    // Clean up: Gemini sometimes wraps JSON in ```json ... ``` blocks
+    // Strip ```json ... ``` fences
     let cleanText = rawText.trim();
     if (cleanText.startsWith('```json')) {
       cleanText = cleanText.slice(7);
@@ -75,10 +75,19 @@ export class GeminiService {
     }
     cleanText = cleanText.trim();
 
+    // Strip inline comments (// ...) that Gemini sometimes adds — not valid JSON
+    cleanText = cleanText.replace(/\/\/[^\n\r"]*/g, '');
+
+    // Strip block comments (/* ... */)
+    cleanText = cleanText.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // Remove trailing commas before } or ] (JSON5 style that Gemini sometimes writes)
+    cleanText = cleanText.replace(/,(\s*[}\]])/g, '$1');
+
     try {
       return JSON.parse(cleanText) as T;
     } catch (parseError: any) {
-      console.error('[GeminiService] JSON parse failed. Raw output:', rawText);
+      console.error('[GeminiService] JSON parse failed. Raw output:', rawText.substring(0, 500));
       throw new Error(`Failed to parse Gemini response as JSON: ${parseError.message}`);
     }
   }

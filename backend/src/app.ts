@@ -1,3 +1,7 @@
+import * as dotenv from 'dotenv';
+import path from 'path';
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import express from 'express';
 import cors from 'cors';
 import apiRoutes from './routes/api.routes';

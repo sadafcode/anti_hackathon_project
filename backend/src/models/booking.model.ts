@@ -1,5 +1,5 @@
 import { ConfirmedIntent } from './intent.model';
-import { RankedProvider } from './discovery.model';
+import { RankedProvider, ConflictInfo } from './discovery.model';
 import { PricingAgentOutput } from './pricing.model';
 
 export type BookingStatus = 'pending' | 'confirmed' | 'conflict_waitlist' | 'provider_declined' | 'cancelled_with_penalty';
@@ -9,7 +9,7 @@ export interface BookingRequest {
   provider: RankedProvider;
   pricing: PricingAgentOutput;
   mock_action?: 'accept' | 'decline' | 'accept-then-reject';
-  all_ranked_providers?: RankedProvider[]; // To auto-reschedule if needed
+  all_ranked_providers?: RankedProvider[];
   is_returning_user?: boolean;
 }
 
@@ -24,6 +24,7 @@ export interface BookingReceipt {
   status: BookingStatus;
   waitlist_suggestion?: string;
   provider_id?: string;
+  conflict_info?: ConflictInfo;
 }
 
 export interface BookingRecord {

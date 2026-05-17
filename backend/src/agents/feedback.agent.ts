@@ -1,110 +1,63 @@
-import fs from 'fs';
-import path from 'path';
-import { QualityChecklist, FeedbackInput, FeedbackOutput } from '../models/feedback.model';
-import { Provider } from '../models/discovery.model';
+import { Agent } from '@openai/agents';
+import { FeedbackOutputSchema } from './schemas';
+import { updateProviderRating, applyProviderPenalty } from '../tools/provider.tools';
 
-export class FeedbackAgent {
-  public async processFeedback(input: FeedbackInput): Promise<FeedbackOutput> {
-    console.log(`\n🚗 Provider ${input.provider.name} is en-route...`);
-    // 1. Mock travel delay
-    await new Promise(r => setTimeout(r, 2000));
+export const feedbackAgent = new Agent({
+  name: 'Feedback Agent',
+  model: 'gpt-4o-mini',
+  outputType: FeedbackOutputSchema,
+  tools: [updateProviderRating, applyProviderPenalty],
+  instructions: `You are the Feedback Agent for Antigravity — Pakistan's home services platform.
 
-    // 2. Handle NO SHOW
-    if (input.mock_action === 'no_show') {
-      console.log(`❌ Provider ${input.provider.name} did not show up!`);
-      this.applyNoShowPenalty(input.provider.id);
-      return {
-        status: 'no_show',
-        dispute_triggered: true
-      };
-    }
+YOUR MISSION: Process post-job feedback and update provider reputation accordingly.
 
-    // 3. Run Checklist for arrived jobs
-    console.log(`✅ Provider arrived. Running quality checklist...`);
-    const checklist: QualityChecklist = {
-      arrived_on_time: input.mock_action === 'on_time',
-      work_completed: true,
-      area_cleaned: true,
-      customer_satisfied: true
-    };
+YOUR INPUT will contain:
+- provider: provider object (id, name, rating, total_reviews, on_time_score)
+- mock_action: "on_time" | "late" | "no_show"
+- feedback: { stars: number (1-5), comment: string } — only present if mock_action !== "no_show"
 
-    if (!input.feedback) {
-      throw new Error('Feedback (stars/comment) is required for completed jobs.');
-    }
+CASE 1 — NO SHOW (mock_action === "no_show"):
+The provider did not arrive. This is a serious breach of trust.
 
-    const { stars } = input.feedback;
+Actions:
+1. Call apply_provider_penalty with provider.id
+2. Return:
+   - status: "no_show"
+   - dispute_triggered: true
+   - checklist: null
+   - new_rating: null
+   - total_reviews: null
+   - ranking_impact: null
 
-    // 4. Determine ranking impact
-    let ranking_impact: 'boost' | 'neutral' | 'penalty' = 'neutral';
-    if (stars >= 4) ranking_impact = 'boost';
-    if (stars <= 2) ranking_impact = 'penalty';
+CASE 2 — JOB COMPLETED (mock_action is "on_time" or "late"):
+The provider arrived and completed the job.
 
-    // 5. Update rating & on-time stats
-    const updatedStats = this.updateProviderStats(input.provider.id, stars, checklist.arrived_on_time);
+Actions:
+1. Call update_provider_rating with:
+   - provider_id: provider.id
+   - new_stars: feedback.stars
+   - arrived_on_time: (mock_action === "on_time")
 
-    return {
-      status: 'completed',
-      checklist,
-      new_rating: updatedStats.new_rating,
-      total_reviews: updatedStats.total_reviews,
-      ranking_impact
-    };
-  }
+2. Determine ranking_impact:
+   - stars >= 4: "boost"
+   - stars === 3: "neutral"
+   - stars <= 2: "penalty"
 
-  private applyNoShowPenalty(providerId: string) {
-    try {
-      const dataPath = path.resolve(__dirname, '../../data/providers.json');
-      if (fs.existsSync(dataPath)) {
-        const fileContent = fs.readFileSync(dataPath, 'utf-8');
-        const providers: Provider[] = JSON.parse(fileContent);
-        
-        const idx = providers.findIndex(p => p.id === providerId);
-        if (idx !== -1) {
-          providers[idx].cancellation_rate += 1;
-          providers[idx].on_time_score = Math.max(0, providers[idx].on_time_score - 10);
-          fs.writeFileSync(dataPath, JSON.stringify(providers, null, 2));
-          console.log(`   📉 No Show Penalty logged: cancellation_rate=${providers[idx].cancellation_rate}, reliability=${providers[idx].on_time_score}`);
-        }
-      }
-    } catch (e) {
-      console.error('Error applying no_show penalty:', e);
-    }
-  }
+3. Return:
+   - status: "completed"
+   - dispute_triggered: false
+   - checklist: {
+       arrived_on_time: mock_action === "on_time",
+       work_completed: true,
+       area_cleaned: true,
+       customer_satisfied: stars >= 3
+     }
+   - new_rating: from tool result
+   - total_reviews: from tool result
+   - ranking_impact: computed above
 
-  private updateProviderStats(providerId: string, stars: number, arrivedOnTime: boolean) {
-    let new_rating = 0;
-    let total_reviews = 0;
-
-    try {
-      const dataPath = path.resolve(__dirname, '../../data/providers.json');
-      if (fs.existsSync(dataPath)) {
-        const fileContent = fs.readFileSync(dataPath, 'utf-8');
-        const providers: Provider[] = JSON.parse(fileContent);
-        
-        const idx = providers.findIndex(p => p.id === providerId);
-        if (idx !== -1) {
-          const oldRating = providers[idx].rating;
-          const oldTotal = providers[idx].total_reviews;
-          
-          new_rating = Number((((oldRating * oldTotal) + stars) / (oldTotal + 1)).toFixed(2));
-          total_reviews = oldTotal + 1;
-
-          providers[idx].rating = new_rating;
-          providers[idx].total_reviews = total_reviews;
-
-          // If late, small penalty to on_time_score
-          if (!arrivedOnTime) {
-             providers[idx].on_time_score = Math.max(0, providers[idx].on_time_score - 2);
-          }
-
-          fs.writeFileSync(dataPath, JSON.stringify(providers, null, 2));
-          console.log(`   🌟 Updated Profile: new_rating=${new_rating}, total_reviews=${total_reviews}`);
-        }
-      }
-    } catch (e) {
-      console.error('Error updating provider stats:', e);
-    }
-
-    return { new_rating, total_reviews };
-  }
-}
+IMPORTANT:
+- Always call the appropriate tool — never skip
+- Never fabricate rating numbers — use exactly what update_provider_rating returns
+- A no_show must ALWAYS trigger dispute_triggered: true so Flutter can prompt the user to file a dispute`,
+});
