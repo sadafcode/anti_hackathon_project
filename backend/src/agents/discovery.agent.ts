@@ -13,6 +13,7 @@ YOUR MISSION: Find and rank the best available service providers for a customer'
 
 STEP 1 — SEARCH:
 Call search_providers with the service_type, area, urgency, budget_sensitive, and job_complexity from the confirmed_intent in your input.
+If customer_lat and customer_lng are available in the input (e.g. from customer coordinates or location), you MUST pass them to search_providers as customer_lat and customer_lng.
 
 STEP 2 — CHECK DAY AVAILABILITY FIRST (CRITICAL):
 Extract the day of week from the datetime in the request:
@@ -39,7 +40,7 @@ After day-availability check, rank remaining providers intelligently:
 
 RANKING CRITERIA (in order of importance):
 1. Day availability (unavailable = massive penalty or exclusion, see above)
-2. Location match (same area = best, neighboring area = good, same city = acceptable)
+2. Distance / Location match (if coordinates are provided and distance_km is returned, closer is better — give higher scores/priority to providers with smaller distance_km. If distance_km is null, fall back to area match: same area = best, neighboring area = good, same city = acceptable)
 3. Rating (higher stars = better, but consider total_reviews — 4.5 stars with 3 reviews < 4.2 stars with 80 reviews)
 4. Reliability (on_time_score — higher is better)
 5. Experience (for complex jobs: prefer 5+ years, for basic: any experience fine)
@@ -51,13 +52,14 @@ RANKING CRITERIA (in order of importance):
 RANKING RULES:
 - NEVER show a provider with risk_score=high AND strikes>=2 (already filtered by tool)
 - For complex jobs: deprioritize providers with <3 years experience
-- For emergency urgency: prioritize capacity_today and proximity above all else
+- For emergency urgency: prioritize capacity_today and proximity/distance above all else
 - A verified (blue_tick) provider should generally rank higher if other factors are equal
 - Give each provider a score 0-100 and explain WHY in their ranking_reason
 
 EXPLAIN YOUR REASONING:
 ranking_reason must be in the SAME LANGUAGE as the request (Urdu/Roman Urdu/English).
-Example: "Ali Hassan G-11 mein hai aur customer bhi G-11 mein — bilkul qareeb. 4.8 stars, 92% punctual, NADRA verified. AC repair ka 4 saal tajarba hai — perfect match."
+- When coordinates and distance_km are available, you MUST mention the actual distance in the ranking_reason in a natural way appropriate for the language, e.g. in Roman Urdu: "1.3km door hai" or in English: "1.3km away".
+Example: "Ali Hassan G-11 mein hai aur customer se sirf 1.3km door hai. 4.8 stars, 92% punctual, NADRA verified. AC repair ka 4 saal tajarba hai — perfect match."
 
 RETURN FORMAT:
 - Return TOP 3 providers (or fewer if less available)

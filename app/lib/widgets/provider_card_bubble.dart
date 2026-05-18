@@ -261,15 +261,36 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     );
   }
 
+  Widget _coloredChip(String tierLabel, String priceLabel, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '$tierLabel: $priceLabel',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoRow(ProviderModel p) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: Wrap(
         spacing: 6,
         runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _chip(Icons.location_on_outlined, p.displayDistance),
-          _chip(Icons.payments_outlined, p.displayPrice),
+          _coloredChip('B', 'Rs.${p.rateBasic.toInt()}', const Color(0xFFE2F0D9), const Color(0xFF385723)),
+          _coloredChip('I', 'Rs.${p.rateIntermediate.toInt()}', const Color(0xFFFFF2CC), const Color(0xFF7F6000)),
+          _coloredChip('C', 'Rs.${p.rateComplex.toInt()}', const Color(0xFFFCE4D6), const Color(0xFFC65911)),
           _chip(Icons.schedule, '${p.onTimeScore}% on-time'),
         ],
       ),

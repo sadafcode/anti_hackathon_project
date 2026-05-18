@@ -74,6 +74,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   if (p.hasStrike) _buildStrikeBanner(p),
                   _buildStatsRow(p),
                   _buildSection('Service Types', _buildServiceChips(p)),
+                  _buildSection('Service Rates', _buildTieredRatesCard(p)),
                   if (p.certifications.isNotEmpty)
                     _buildSection(
                         'Certifications', _buildTextList(p.certifications)),
@@ -534,6 +535,92 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
               )),
           const SizedBox(height: 10),
           child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTieredRatesCard(ProviderModel p) {
+    return Column(
+      children: [
+        _buildTierRow(
+          'Basic Service',
+          'Sada kaam (e.g. minor checkups, quick fixes, cleaning)',
+          'Rs. ${p.rateBasic.toInt()}',
+          const Color(0xFFE2F0D9),
+          const Color(0xFF385723),
+        ),
+        const SizedBox(height: 8),
+        _buildTierRow(
+          'Intermediate Service',
+          'Darmiana kaam (e.g. repairs, component replacement)',
+          'Rs. ${p.rateIntermediate.toInt()}',
+          const Color(0xFFFFF2CC),
+          const Color(0xFF7F6000),
+        ),
+        const SizedBox(height: 8),
+        _buildTierRow(
+          'Complex Service',
+          'Mushkil kaam (e.g. master installation, major overhauls)',
+          'Rs. ${p.rateComplex.toInt()}',
+          const Color(0xFFFCE4D6),
+          const Color(0xFFC65911),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTierRow(
+      String title, String description, String price, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textGrey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              price,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+            ),
+          ),
         ],
       ),
     );

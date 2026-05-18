@@ -297,13 +297,17 @@ function getDefaultRankingReason(p: any, dayName: string, lang: string): string 
   const isAvail = p.score_breakdown.availability > 0;
   const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
   const prefix = isAvail ? '' : `${capitalizedDay} ko available nahi — `;
-  
+  const distanceStr = p.distance_km !== null && p.distance_km !== undefined
+    ? (lang === 'english' ? ` (${p.distance_km}km away)` : ` (${p.distance_km}km door)`)
+    : '';
+
   if (lang === 'urdu') {
-    return `${prefix}${p.name} بہترین انتخاب ہے۔ ریٹنگ ${p.rating} ستارے اور آن ٹائم سکور ${p.on_time_score}% ہے۔`;
+    const urduDistance = p.distance_km !== null && p.distance_km !== undefined ? ` (${p.distance_km} کلومیٹر دور)` : '';
+    return `${prefix}${p.name} بہترین انتخاب ہے۔ ریٹنگ ${p.rating} ستارے، آن ٹائم سکور ${p.on_time_score}% ہے${urduDistance}۔`;
   } else if (lang === 'english') {
-    return `${prefix}${p.name} is a great match. Rated ${p.rating} stars with ${p.on_time_score}% punctuality.`;
+    return `${prefix}${p.name} is a great match. Rated ${p.rating} stars with ${p.on_time_score}% punctuality${distanceStr}.`;
   } else {
-    return `${prefix}${p.name} achha match hai. Rating ${p.rating} stars aur on-time score ${p.on_time_score}% hai.`;
+    return `${prefix}${p.name} achha match hai. Rating ${p.rating} stars, on-time score ${p.on_time_score}% hai${distanceStr}.`;
   }
 }
 
@@ -329,12 +333,26 @@ function rankList(providers: any[], isAvailable: boolean, dayName: string, inten
     const availScore = isAvailable ? 100 : 0;
 
     let distScore = 20;
-    if (p.same_area) {
-      distScore = 100;
-    } else if (areasMatch(p.area, area)) {
-      distScore = 80;
-    } else if (resolveCity(p.area) === resolveCity(area)) {
-      distScore = 50;
+    if (p.distance_km !== null && p.distance_km !== undefined) {
+      if (p.distance_km <= 2) {
+        distScore = 100;
+      } else if (p.distance_km <= 5) {
+        distScore = 80;
+      } else if (p.distance_km <= 10) {
+        distScore = 60;
+      } else if (p.distance_km <= 20) {
+        distScore = 40;
+      } else {
+        distScore = 20;
+      }
+    } else {
+      if (p.same_area) {
+        distScore = 100;
+      } else if (areasMatch(p.area, area)) {
+        distScore = 80;
+      } else if (resolveCity(p.area) === resolveCity(area)) {
+        distScore = 50;
+      }
     }
 
     const ratingScore = Math.round((p.rating / 5) * 100);
@@ -404,6 +422,9 @@ router.post('/discovery', async (req, res) => {
     const { intent } = req.body;
     if (!intent) return res.status(400).json({ error: 'intent is required' });
 
+    const customer_lat = intent.customer_lat !== undefined ? intent.customer_lat : (intent.location?.coordinates?.lat ?? null);
+    const customer_lng = intent.customer_lng !== undefined ? intent.customer_lng : (intent.location?.coordinates?.lng ?? null);
+
     // Call searchProviders tool execute() directly via invoke wrapper to bypass agent and Zod static type constraints
     const searchResult = await (searchProviders as any).invoke({} as any, JSON.stringify({
       service_type: intent.service_type,
@@ -411,6 +432,8 @@ router.post('/discovery', async (req, res) => {
       urgency: intent.urgency || null,
       budget_sensitive: intent.budget_sensitive || false,
       job_complexity: intent.job_complexity || null,
+      customer_lat,
+      customer_lng,
     }));
 
     let dayName = 'monday';
@@ -511,7 +534,8 @@ ${JSON.stringify(ranked_providers.map(p => ({
   on_time_score: p.on_time_score,
   blue_tick: p.blue_tick,
   calculated_score: p.calculated_score,
-  is_available: p.score_breakdown.availability > 0
+  is_available: p.score_breakdown.availability > 0,
+  distance_km: p.distance_km,
 })), null, 2)}`
             }
           ],
@@ -597,6 +621,9 @@ PROVIDER:
 - Name: ${provider.name}
 - Area: ${provider.area}
 - Base Hourly Rate: Rs.${provider.hourly_rate}
+- Rate Basic: Rs.${provider.rate_basic || provider.hourly_rate}
+- Rate Intermediate: Rs.${provider.rate_intermediate || (provider.hourly_rate * 1.4)}
+- Rate Complex: Rs.${provider.rate_complex || (provider.hourly_rate * 2.0)}
 - Experience: ${provider.experience_years} years
 - NADRA Verified: ${provider.blue_tick}
 
@@ -1093,7 +1120,7 @@ Follow the rules and evaluation criteria strictly. Do not hallucinate any price 
 // ─── 7. REGISTER PROVIDER ────────────────────────────────────────────────────
 router.post('/provider/register', async (req, res) => {
   try {
-    const { name, service_types, area, hourly_rate, experience_years, nic, availability } = req.body;
+    const { name, service_types, area, hourly_rate, rate_basic, rate_intermediate, rate_complex, experience_years, nic, availability } = req.body;
 
     let blue_tick = false;
     let nadra_status = 'no_nic';
@@ -1109,7 +1136,11 @@ router.post('/provider/register', async (req, res) => {
 
     const newProvider = {
       id: 'PRV-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-      name, area, service_types, hourly_rate, experience_years, blue_tick,
+      name, area, service_types, hourly_rate,
+      rate_basic: rate_basic || hourly_rate,
+      rate_intermediate: rate_intermediate || hourly_rate * 1.4,
+      rate_complex: rate_complex || hourly_rate * 2.0,
+      experience_years, blue_tick,
       rating: 0, total_reviews: 0, review_sentiment: 'unrated',
       on_time_score: 100, cancellation_rate: 0, capacity_today: 3,
       risk_score: 'low', strikes: 0, user_preference_score: 0,

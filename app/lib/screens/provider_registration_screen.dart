@@ -29,7 +29,9 @@ class _ProviderRegistrationScreenState
   final _phoneCtrl = TextEditingController();
   final _nicCtrl = TextEditingController();
   final _expCtrl = TextEditingController();
-  final _rateCtrl = TextEditingController();
+  final _rateBasicCtrl = TextEditingController();
+  final _rateIntermediateCtrl = TextEditingController();
+  final _rateComplexCtrl = TextEditingController();
   final _certCtrl = TextEditingController();
 
   // State
@@ -150,7 +152,9 @@ class _ProviderRegistrationScreenState
     _phoneCtrl.dispose();
     _nicCtrl.dispose();
     _expCtrl.dispose();
-    _rateCtrl.dispose();
+    _rateBasicCtrl.dispose();
+    _rateIntermediateCtrl.dispose();
+    _rateComplexCtrl.dispose();
     _certCtrl.dispose();
     _successController.dispose();
     super.dispose();
@@ -320,12 +324,16 @@ class _ProviderRegistrationScreenState
     setState(() => _submitting = true);
 
     try {
+      final basicRateVal = int.tryParse(_rateBasicCtrl.text.trim()) ?? 500;
       final providerData = {
         'name': _nameCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
         'nic': _nicCtrl.text.trim(),
         'experience_years': int.tryParse(_expCtrl.text.trim()) ?? 1,
-        'hourly_rate': int.tryParse(_rateCtrl.text.trim()) ?? 500,
+        'hourly_rate': basicRateVal,
+        'rate_basic': basicRateVal,
+        'rate_intermediate': int.tryParse(_rateIntermediateCtrl.text.trim()) ?? (basicRateVal * 1.4).toInt(),
+        'rate_complex': int.tryParse(_rateComplexCtrl.text.trim()) ?? (basicRateVal * 2.0).toInt(),
         'certifications': _certCtrl.text.trim(),
         'service_types': _selectedServices.map((s) => s.toLowerCase()).toList(),
         'area': _selectedArea,
@@ -540,29 +548,49 @@ class _ProviderRegistrationScreenState
             _buildCard([
               _buildAreaDropdown(),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: _buildTextField(
-                    _expCtrl,
-                    'Tajurba (saal) *',
-                    Icons.workspace_premium_outlined,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    validator: _requiredValidator,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildTextField(
-                    _rateCtrl,
-                    'Hourly Rate (Rs.) *',
-                    Icons.payments_outlined,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    validator: _requiredValidator,
-                  ),
-                ),
-              ]),
+              _buildTextField(
+                _expCtrl,
+                'Tajurba (saal) *',
+                Icons.workspace_premium_outlined,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: _requiredValidator,
+              ),
+            ]),
+            const SizedBox(height: 20),
+
+            _buildSectionHeader('Apni Rates Likho', Icons.payments_outlined),
+            const SizedBox(height: 10),
+            _buildCard([
+              _buildTextField(
+                _rateBasicCtrl,
+                'Basic Kaam (Rs.) *',
+                Icons.payments_outlined,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: _requiredValidator,
+                helperText: 'Saaf safai, routine check — e.g. 500',
+              ),
+              const SizedBox(height: 12),
+              _buildTextField(
+                _rateIntermediateCtrl,
+                'Intermediate Kaam (Rs.) *',
+                Icons.payments_outlined,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: _requiredValidator,
+                helperText: 'Installation, wiring, repairs — e.g. 1000',
+              ),
+              const SizedBox(height: 12),
+              _buildTextField(
+                _rateComplexCtrl,
+                'Complex Kaam (Rs.) *',
+                Icons.payments_outlined,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: _requiredValidator,
+                helperText: 'Expert work, emergency — e.g. 2000',
+              ),
             ]),
             const SizedBox(height: 20),
 

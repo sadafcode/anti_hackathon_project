@@ -12,6 +12,7 @@ import 'map_picker_screen.dart';
 import 'agent_trace_screen.dart';
 import 'baseline_comparison_screen.dart';
 import '../services/api_service.dart';
+import '../utils/location_helper.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -110,8 +111,16 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _scrollToBottom();
 
+        // Attach GPS coordinates to intent before discovery
+        final gpsLocation = await getUserWebLocation();
+        final intentWithCoords = Map<String, dynamic>.from(confirmedIntent);
+        if (gpsLocation != null) {
+          intentWithCoords['customer_lat'] = gpsLocation.latitude;
+          intentWithCoords['customer_lng'] = gpsLocation.longitude;
+        }
+
         // Trigger discovery
-        final discoveryResp = await ApiService.discoverProviders(confirmedIntent);
+        final discoveryResp = await ApiService.discoverProviders(intentWithCoords);
 
         if (discoveryResp['status'] == 'no_providers') {
            setState(() {

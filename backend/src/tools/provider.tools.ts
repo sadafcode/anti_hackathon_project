@@ -54,6 +54,19 @@ function areasMatch(providerArea: string, requestedArea: string): boolean {
   return (NEIGHBORS[ra] || []).includes(pa);
 }
 
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+  return Number(distance.toFixed(2));
+}
+
 export const searchProviders = tool({
   name: 'search_providers',
   description: 'Search providers from the database filtered by service type and area. Returns all matching available providers with their full profiles.',
@@ -63,8 +76,10 @@ export const searchProviders = tool({
     urgency: z.string().nullable().describe('low, medium, high, emergency — or null if not specified'),
     budget_sensitive: z.boolean().nullable(),
     job_complexity: z.string().nullable().describe('basic, intermediate, complex — or null if not specified'),
+    customer_lat: z.number().nullable().optional().describe('Customer GPS latitude'),
+    customer_lng: z.number().nullable().optional().describe('Customer GPS longitude'),
   }),
-  execute: async ({ service_type, area, urgency, budget_sensitive, job_complexity }) => {
+  execute: async ({ service_type, area, urgency, budget_sensitive, job_complexity, customer_lat, customer_lng }) => {
     const providers = readProviders();
 
     const byService = providers.filter((p: any) =>
@@ -75,17 +90,70 @@ export const searchProviders = tool({
       return { found: 0, providers: [], message: `No ${service_type} providers registered on platform.` };
     }
 
-    const nearby = byService.filter((p: any) => areasMatch(p.area, area));
-    const pool = nearby.length > 0 ? nearby : byService;
+    const hasCoords = customer_lat !== null && customer_lat !== undefined && customer_lng !== null && customer_lng !== undefined;
+    
+    let available: any[] = [];
+    let nearbyCount = 0;
+    let radiusUsed: string | number | null = null;
 
-    const available = pool.filter((p: any) =>
+    const isAvailable = (p: any) =>
       (p.capacity_today || 0) > 0 &&
-      !(p.risk_score === 'high' && (p.strikes || 0) >= 2)
-    );
+      !(p.risk_score === 'high' && (p.strikes || 0) >= 2);
+
+    if (hasCoords) {
+      const providersWithDistance = byService.map((p: any) => {
+        const lat2 = p.coordinates?.lat;
+        const lng2 = p.coordinates?.lng;
+        const dist = (lat2 !== undefined && lng2 !== undefined)
+          ? haversineDistance(customer_lat, customer_lng, lat2, lng2)
+          : null;
+        return { ...p, distance_km: dist };
+      });
+
+      const radii = [2, 5, 10, 20];
+      let selectedRadius: number | null = null;
+
+      for (const r of radii) {
+        const inRadius = providersWithDistance.filter((p: any) => p.distance_km !== null && p.distance_km <= r);
+        const availInRadius = inRadius.filter(isAvailable);
+        if (availInRadius.length > 0) {
+          selectedRadius = r;
+          available = availInRadius;
+          nearbyCount = inRadius.length;
+          break;
+        }
+      }
+
+      if (selectedRadius !== null) {
+        radiusUsed = selectedRadius;
+      } else {
+        // Fallback to all city providers
+        radiusUsed = 'city';
+        const city = resolveCity(area);
+        if (city) {
+          const inCity = providersWithDistance.filter((p: any) => resolveCity(p.area) === city);
+          available = inCity.filter(isAvailable);
+          nearbyCount = inCity.length;
+        } else {
+          // If no city found, fall back to all providers of this service type
+          available = providersWithDistance.filter(isAvailable);
+          nearbyCount = providersWithDistance.length;
+        }
+      }
+    } else {
+      // Current area-name matching fallback
+      const nearby = byService.filter((p: any) => areasMatch(p.area, area));
+      const pool = nearby.length > 0 ? nearby : byService;
+
+      available = pool.filter(isAvailable).map((p: any) => ({ ...p, distance_km: null }));
+      nearbyCount = nearby.length;
+      radiusUsed = null;
+    }
 
     return {
       found: available.length,
-      total_in_area: nearby.length,
+      total_in_area: nearbyCount,
+      radius_used: radiusUsed,
       providers: available.map((p: any) => ({
         id: p.id,
         name: p.name,
@@ -99,6 +167,9 @@ export const searchProviders = tool({
         on_time_score: p.on_time_score || 100,
         cancellation_rate: p.cancellation_rate || 0,
         hourly_rate: p.hourly_rate || 500,
+        rate_basic: p.rate_basic || p.hourly_rate || 500,
+        rate_intermediate: p.rate_intermediate || (p.hourly_rate ? p.hourly_rate * 1.4 : 700),
+        rate_complex: p.rate_complex || (p.hourly_rate ? p.hourly_rate * 2 : 1000),
         capacity_today: p.capacity_today || 0,
         blue_tick: p.blue_tick || false,
         risk_score: p.risk_score || 'low',
@@ -108,6 +179,7 @@ export const searchProviders = tool({
         user_preference_score: p.user_preference_score || 0,
         availability: p.availability || {},
         same_area: p.area.toLowerCase().trim() === area.toLowerCase().trim(),
+        distance_km: p.distance_km,
       })),
       context: { urgency, budget_sensitive, job_complexity, requested_area: area },
     };
@@ -209,11 +281,14 @@ export const registerNewProvider = tool({
     service_types: z.array(z.string()),
     area: z.string(),
     hourly_rate: z.number(),
+    rate_basic: z.number().nullable().optional(),
+    rate_intermediate: z.number().nullable().optional(),
+    rate_complex: z.number().nullable().optional(),
     experience_years: z.number(),
     nic: z.string().nullable(),
     availability: z.record(z.string(), z.array(z.string())).nullable(),
   }),
-  execute: async ({ name, service_types, area, hourly_rate, experience_years, nic, availability }) => {
+  execute: async ({ name, service_types, area, hourly_rate, rate_basic, rate_intermediate, rate_complex, experience_years, nic, availability }) => {
     const providers = readProviders();
 
     // Simple mock NADRA check
@@ -232,7 +307,11 @@ export const registerNewProvider = tool({
 
     const newProvider = {
       id: 'PRV-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-      name, area, service_types, hourly_rate, experience_years, blue_tick,
+      name, area, service_types, hourly_rate,
+      rate_basic: rate_basic || hourly_rate,
+      rate_intermediate: rate_intermediate || hourly_rate * 1.4,
+      rate_complex: rate_complex || hourly_rate * 2.0,
+      experience_years, blue_tick,
       rating: 0, total_reviews: 0, review_sentiment: 'unrated',
       on_time_score: 100, cancellation_rate: 0, capacity_today: 3,
       risk_score: 'low', strikes: 0, user_preference_score: 0,

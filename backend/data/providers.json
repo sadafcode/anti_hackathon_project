@@ -25,6 +25,9 @@
       "lng": 73.013
     },
     "hourly_rate": 800,
+    "rate_basic": 700,
+    "rate_intermediate": 1200,
+    "rate_complex": 2000,
     "availability": {
       "monday": [
         "09:00",
@@ -83,6 +86,9 @@
       "lng": 72.98
     },
     "hourly_rate": 600,
+    "rate_basic": 500,
+    "rate_intermediate": 900,
+    "rate_complex": 1500,
     "availability": {
       "monday": [
         "10:00",
@@ -138,6 +144,9 @@
       "lng": 73.018
     },
     "hourly_rate": 700,
+    "rate_basic": 400,
+    "rate_intermediate": 800,
+    "rate_complex": 1200,
     "availability": {
       "monday": [
         "09:00",
@@ -194,6 +203,9 @@
       "lng": 73.045
     },
     "hourly_rate": 500,
+    "rate_basic": 600,
+    "rate_intermediate": 1000,
+    "rate_complex": 1800,
     "availability": {
       "monday": [
         "12:00"
@@ -246,6 +258,9 @@
       "lng": 73.076
     },
     "hourly_rate": 1000,
+    "rate_basic": 400,
+    "rate_intermediate": 700,
+    "rate_complex": 1000,
     "availability": {
       "monday": [
         "16:00",
@@ -302,6 +317,9 @@
       "lng": 72.978
     },
     "hourly_rate": 450,
+    "rate_basic": 400,
+    "rate_intermediate": 800,
+    "rate_complex": 1200,
     "availability": {
       "monday": [],
       "tuesday": [
@@ -354,6 +372,9 @@
       "lng": 73.015
     },
     "hourly_rate": 900,
+    "rate_basic": 500,
+    "rate_intermediate": 900,
+    "rate_complex": 1500,
     "availability": {
       "monday": [
         "09:00"
@@ -409,6 +430,9 @@
       "lng": 73.011
     },
     "hourly_rate": 600,
+    "rate_basic": 700,
+    "rate_intermediate": 1200,
+    "rate_complex": 2000,
     "availability": {
       "monday": [
         "15:00"

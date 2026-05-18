@@ -27,6 +27,9 @@ class ProviderModel {
   final List<String> toolsAvailable;
   final String area;
   final double hourlyRate;
+  final double rateBasic;
+  final double rateIntermediate;
+  final double rateComplex;
   final int onTimeScore;
   final int cancellationRate;
   final int capacityToday;
@@ -56,6 +59,9 @@ class ProviderModel {
     required this.toolsAvailable,
     required this.area,
     required this.hourlyRate,
+    double? rateBasic,
+    double? rateIntermediate,
+    double? rateComplex,
     required this.onTimeScore,
     required this.cancellationRate,
     required this.capacityToday,
@@ -71,9 +77,12 @@ class ProviderModel {
     this.photoUrl,
     this.gender = 'male',
     this.availability = const {},
-  });
+  }) : rateBasic = rateBasic ?? hourlyRate,
+       rateIntermediate = rateIntermediate ?? (hourlyRate * 1.4),
+       rateComplex = rateComplex ?? (hourlyRate * 2.0);
 
   factory ProviderModel.fromJson(Map<String, dynamic> json) {
+    final hr = (json['hourly_rate'] ?? 0).toDouble();
     return ProviderModel(
       id: json['id'] ?? '',
       name: json['name'] ?? 'Unknown',
@@ -86,7 +95,10 @@ class ProviderModel {
       certifications: [],
       toolsAvailable: [],
       area: json['area'] ?? '',
-      hourlyRate: (json['hourly_rate'] ?? 0).toDouble(),
+      hourlyRate: hr,
+      rateBasic: json['rate_basic'] != null ? (json['rate_basic'] as num).toDouble() : hr,
+      rateIntermediate: json['rate_intermediate'] != null ? (json['rate_intermediate'] as num).toDouble() : (hr * 1.4),
+      rateComplex: json['rate_complex'] != null ? (json['rate_complex'] as num).toDouble() : (hr * 2.0),
       onTimeScore: json['on_time_score'] ?? 0,
       cancellationRate: json['cancellation_rate'] ?? 0,
       capacityToday: json['capacity_today'] ?? 0,
@@ -114,6 +126,9 @@ class ProviderModel {
       'experience_years': experienceYears,
       'area': area,
       'hourly_rate': hourlyRate,
+      'rate_basic': rateBasic,
+      'rate_intermediate': rateIntermediate,
+      'rate_complex': rateComplex,
       'on_time_score': onTimeScore,
       'cancellation_rate': cancellationRate,
       'capacity_today': capacityToday,
@@ -126,7 +141,7 @@ class ProviderModel {
   }
 
   String get initials => name.split(' ').map((w) => w[0]).take(2).join();
-  String get displayPrice => 'Rs. ${hourlyRate.toInt()} - ${(hourlyRate * 1.5).toInt()}';
+  String get displayPrice => 'Rs. ${rateBasic.toInt()} - ${rateComplex.toInt()}';
   String get displayDistance => '${distanceKm.toStringAsFixed(1)} km';
   bool get hasStrike => strikes > 0;
   String get experienceText => '$experienceYears saal ka tajurba';

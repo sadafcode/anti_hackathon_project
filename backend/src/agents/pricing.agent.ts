@@ -9,6 +9,9 @@ const computePriceComponents = tool({
   description: 'Compute the raw numeric price components based on booking parameters. Returns numbers only — the agent then formats and explains them.',
   parameters: z.object({
     base_hourly_rate: z.number(),
+    provider_rate_basic: z.number().nullable().optional(),
+    provider_rate_intermediate: z.number().nullable().optional(),
+    provider_rate_complex: z.number().nullable().optional(),
     job_complexity: z.enum(['basic', 'intermediate', 'complex']),
     urgency: z.enum(['low', 'medium', 'high', 'emergency']),
     is_same_area: z.boolean(),
@@ -16,12 +19,30 @@ const computePriceComponents = tool({
     is_returning_user: z.boolean(),
     budget_sensitive: z.boolean(),
   }),
-  execute: async ({ base_hourly_rate, job_complexity, urgency, is_same_area, requested_hour, is_returning_user }) => {
-    const complexityMap = { basic: 1.0, intermediate: 1.2, complex: 1.5 };
+  execute: async ({
+    base_hourly_rate,
+    provider_rate_basic,
+    provider_rate_intermediate,
+    provider_rate_complex,
+    job_complexity,
+    urgency,
+    is_same_area,
+    requested_hour,
+    is_returning_user
+  }) => {
+    // Select base rate based on complexity
+    let baseRate = base_hourly_rate;
+    if (job_complexity === 'basic') {
+      baseRate = provider_rate_basic ?? base_hourly_rate;
+    } else if (job_complexity === 'intermediate') {
+      baseRate = provider_rate_intermediate ?? (base_hourly_rate * 1.4);
+    } else if (job_complexity === 'complex') {
+      baseRate = provider_rate_complex ?? (base_hourly_rate * 2.0);
+    }
+
     const urgencyMap = { low: 0, medium: 0.10, high: 0.30, emergency: 0.50 };
 
-    const complexityFactor = complexityMap[job_complexity];
-    const baseWithComplexity = base_hourly_rate * complexityFactor;
+    const baseWithComplexity = baseRate;
     const urgencyFee = Math.round(baseWithComplexity * urgencyMap[urgency]);
     const distanceCost = is_same_area ? 0 : 100;
     const isPeak = (requested_hour >= 12 && requested_hour < 15) || (requested_hour >= 18 && requested_hour < 21);
@@ -38,8 +59,8 @@ const computePriceComponents = tool({
     const providerEarning = total - platformFee;
 
     return {
-      base_rate: Math.round(base_hourly_rate),
-      complexity_factor: complexityFactor,
+      base_rate: Math.round(baseRate),
+      complexity_factor: 1.0,
       base_with_complexity: Math.round(baseWithComplexity),
       urgency_fee: urgencyFee,
       distance_cost: distanceCost,
@@ -50,7 +71,7 @@ const computePriceComponents = tool({
       provider_earning: providerEarning,
       total,
       provider_percentage: Math.round((providerEarning / total) * 100),
-      budget_base_total: Math.round((base_hourly_rate + distanceCost) / 0.9),
+      budget_base_total: Math.round((baseRate + distanceCost) / 0.9),
     };
   },
 });
@@ -66,7 +87,10 @@ YOUR MISSION: Calculate a fair, transparent, and detailed price quote for a serv
 
 STEP 1 — COMPUTE NUMBERS:
 Call compute_price_components with:
-- base_hourly_rate: from the provider
+- base_hourly_rate: from the provider's base hourly rate
+- provider_rate_basic: from the provider's rate_basic
+- provider_rate_intermediate: from the provider's rate_intermediate
+- provider_rate_complex: from the provider's rate_complex
 - job_complexity: from the intent
 - urgency: from the intent
 - is_same_area: true if provider.area === intent.location.area
@@ -77,15 +101,14 @@ Call compute_price_components with:
 STEP 2 — FORMAT THE BREAKDOWN:
 Create a clear, readable breakdown_text. Format it line by line like this:
 "Base Rate: Rs.800
-Complexity (intermediate ×1.2): Rs.160
 Urgency (high +30%): Rs.240
 Distance: Rs.100
 Surge (peak hours): Rs.0
 Loyalty Discount: -Rs.0
 Platform Fee (10%): Rs.130
 ─────────────────
-Total: Rs.1,430
-Provider Earns: Rs.1,300 (91%)"
+Total: Rs.1,270
+Provider Earns: Rs.1,140 (90%)"
 
 STEP 3 — PROVIDER PERCENTAGE NOTE:
 Write a friendly note emphasizing fairness: the provider earns ~90% — much better than traditional middlemen who take 30-40%.
