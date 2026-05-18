@@ -61,11 +61,11 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     );
   }
 
-  bool _isLoadingPricing = false;
+  bool _isBooking = false;
 
   void _openPricing() async {
-    if (_isLoadingPricing) return;
-    setState(() => _isLoadingPricing = true);
+    if (_isBooking) return;
+    setState(() => _isBooking = true);
     
     try {
       // Mock intent creation for pricing since we don't have the global intent here easily
@@ -89,7 +89,6 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
       final contractId = pricingJson['contract_id'] as String? ?? '';
 
       if (mounted) {
-        setState(() => _isLoadingPricing = false);
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -104,10 +103,13 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoadingPricing = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading pricing: $e')),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isBooking = false);
       }
     }
   }
@@ -420,14 +422,23 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 elevation: 0,
               ),
-              child: const Text(
-                'Book Karo',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: _isBooking
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Book Karo',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ],

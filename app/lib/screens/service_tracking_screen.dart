@@ -7,8 +7,13 @@ import 'feedback_screen.dart';
 
 class ServiceTrackingScreen extends StatefulWidget {
   final ProviderModel provider;
+  final String? bookingId;
 
-  const ServiceTrackingScreen({super.key, required this.provider});
+  const ServiceTrackingScreen({
+    super.key,
+    required this.provider,
+    this.bookingId,
+  });
 
   @override
   State<ServiceTrackingScreen> createState() => _ServiceTrackingScreenState();
@@ -524,8 +529,10 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
                 ? () => Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            FeedbackScreen(provider: widget.provider),
+                        builder: (_) => FeedbackScreen(
+                          provider: widget.provider,
+                          bookingId: widget.bookingId,
+                        ),
                       ),
                     )
                 : null,

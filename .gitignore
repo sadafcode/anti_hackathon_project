@@ -5,3 +5,4 @@ dist/
 *.js.map
 CLAUDE.md
 app/android/local.properties
+serviceAccountKey.json

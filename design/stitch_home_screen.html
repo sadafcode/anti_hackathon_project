@@ -1,0 +1,250 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>KhidmatBot - Smart Services</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed": "#2c1600",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed-dim": "#bdc2ff",
+                        "on-surface-variant": "#454652",
+                        "outline": "#767683",
+                        "surface-bright": "#fbf8ff",
+                        "secondary-container": "#83f5c6",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-fixed-variant": "#693c00",
+                        "inverse-surface": "#303036",
+                        "on-primary-fixed": "#000767",
+                        "on-secondary-fixed": "#002115",
+                        "primary-fixed": "#e0e0ff",
+                        "tertiary-container": "#492800",
+                        "surface": "#fbf8ff",
+                        "on-error": "#ffffff",
+                        "primary-container": "#1a237e",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-container": "#dc8200",
+                        "on-secondary-fixed-variant": "#00513a",
+                        "inverse-on-surface": "#f2eff8",
+                        "surface-variant": "#e4e1ea",
+                        "secondary-fixed": "#86f8c9",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed-dim": "#ffb870",
+                        "on-primary-fixed-variant": "#343d96",
+                        "tertiary-fixed": "#ffdcbe",
+                        "on-background": "#1b1b21",
+                        "secondary-fixed-dim": "#68dbae",
+                        "background": "#fbf8ff",
+                        "surface-container-highest": "#e4e1ea",
+                        "on-primary-container": "#8690ee",
+                        "tertiary": "#2c1600",
+                        "surface-container": "#efecf5",
+                        "surface-container-high": "#eae7ef",
+                        "inverse-primary": "#bdc2ff",
+                        "surface-tint": "#4c56af",
+                        "surface-dim": "#dbd9e1",
+                        "outline-variant": "#c6c5d4",
+                        "secondary": "#006c4e",
+                        "on-surface": "#1b1b21",
+                        "primary": "#000666",
+                        "error": "#ba1a1a",
+                        "on-error-container": "#93000a",
+                        "on-primary": "#ffffff",
+                        "on-secondary-container": "#007151",
+                        "surface-container-low": "#f5f2fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "12px",
+                        "gutter": "24px",
+                        "xl": "80px",
+                        "margin-desktop": "64px",
+                        "base": "8px",
+                        "lg": "48px",
+                        "md": "24px",
+                        "xs": "4px",
+                        "margin-mobile": "20px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Manrope"],
+                        "headline-lg": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "headline-md": ["Manrope"],
+                        "label-sm": ["Manrope"],
+                        "headline-xl": ["Manrope"],
+                        "headline-lg-mobile": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "headline-xl": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .bg-gradient-main {
+            background: linear-gradient(180deg, #EEF0FB 0%, #F8F9FF 100%);
+        }
+        .agent-pulse {
+            box-shadow: 0 0 0 0 rgba(26, 35, 126, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(26, 35, 126, 0.4); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(26, 35, 126, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(26, 35, 126, 0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-main min-h-screen font-body-md text-on-surface pb-32">
+<!-- Top Navigation Anchor (Shared Component) -->
+<header class="bg-surface shadow-sm sticky top-0 z-50 flex justify-between items-center w-full px-margin-mobile h-16">
+<div class="flex items-center gap-xs">
+<div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-headline-md" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<h1 class="text-headline-md font-extrabold text-primary">KhidmatBot</h1>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-low transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+</header>
+<main class="max-w-md mx-auto px-margin-mobile pt-md">
+<!-- Hero Section -->
+<section class="mb-lg grid grid-cols-1 gap-md">
+<div class="space-y-sm">
+<h2 class="font-headline-xl text-headline-xl text-primary leading-tight">
+                    Smart Services. <br>
+<span class="text-on-primary-container">Seamless Connections.</span>
+</h2>
+<div class="w-12 h-1 bg-primary rounded-full"></div>
+<p class="text-body-md text-on-surface-variant max-w-[85%]">
+                    Our dedicated agents work behind the scenes to find, verify and connect you with the best service providers in your area.
+                </p>
+</div>
+<!-- Agent Visual Illustration -->
+<div class="relative h-64 w-full flex items-center justify-center">
+<!-- Center Agent -->
+<div class="z-20 w-32 h-32 rounded-full bg-primary-container flex items-center justify-center shadow-lg border-4 border-white overflow-hidden">
+<img alt="Primary Agent" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuPPabmDULGriQPS9tmgXk-aoXOSFmafUWUs4mJOj8SHeAqnJo6Lt1j5iP3b2Qd8QjHbxWLkMGI1aYBTF-wyByVvps_FUgoTSW3pC8Vu0VmRulPrATm8Wkrd_3Z1eWr8ZQwSY8Hg1VZrDT5keIbF2ePeObt306w0uj7WwcqzAQZBkLGcmx-XbSYiJRwW8YgyRLMpOwUmgcLL11p-7ZncxgurDetyNnyUDMabfQuYYL_jQUo9jDvEOFX54eSGlIv2aKfr_EhRQJeth8">
+</div>
+<!-- Orbiting Nodes -->
+<div class="absolute w-48 h-48 border-2 border-dashed border-outline-variant rounded-full animate-[spin_20s_linear_infinite]"></div>
+<div class="absolute top-0 left-1/4 w-12 h-12 rounded-full bg-white shadow-md flex items-center justify-center text-secondary border border-surface-container-highest">
+<span class="material-symbols-outlined" data-icon="electric_bolt">electric_bolt</span>
+</div>
+<div class="absolute top-1/2 -right-2 w-12 h-12 rounded-full bg-white shadow-md flex items-center justify-center text-tertiary-container border border-surface-container-highest">
+<span class="material-symbols-outlined" data-icon="plumbing">plumbing</span>
+</div>
+<div class="absolute bottom-4 left-0 w-12 h-12 rounded-full bg-white shadow-md flex items-center justify-center text-primary border border-surface-container-highest">
+<span class="material-symbols-outlined" data-icon="ac_unit">ac_unit</span>
+</div>
+<div class="absolute top-1/4 -left-4 w-12 h-12 rounded-full bg-white shadow-md flex items-center justify-center text-on-tertiary-container border border-surface-container-highest">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+</div>
+<!-- Location Indicator -->
+<div class="absolute bottom-0 right-1/4 flex flex-col items-center">
+<span class="material-symbols-outlined text-primary text-[40px]" style="font-variation-settings: 'FILL' 1;">location_on</span>
+<div class="w-4 h-1 bg-primary/20 blur-sm rounded-full"></div>
+</div>
+</div>
+</section>
+<!-- Primary Action Card: Bot Chat -->
+<div class="bg-primary-container text-white rounded-[2rem] p-md mb-md shadow-lg flex items-center justify-between group active:scale-95 transition-all">
+<div class="flex items-center gap-md">
+<div class="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md">
+<span class="material-symbols-outlined text-headline-lg" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md">KhidmatBot Kholein</h3>
+<p class="text-label-md text-white/75">Chat with our smart assistant</p>
+</div>
+</div>
+<div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-primary-container shadow-md group-hover:translate-x-1 transition-transform">
+<span class="material-symbols-outlined font-bold">arrow_forward</span>
+</div>
+</div>
+<!-- Secondary Action Cards -->
+<div class="space-y-sm">
+<!-- Registration -->
+<div class="bg-white rounded-xl p-md shadow-sm border border-surface-container-low flex items-center justify-between active:scale-[0.98] transition-all">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 bg-secondary-container/30 rounded-lg flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-headline-md">person_add</span>
+</div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Provider Registration</h4>
+<p class="text-label-sm text-on-surface-variant">Join our network of professionals</p>
+</div>
+</div>
+<div class="w-10 h-10 bg-secondary rounded-full flex items-center justify-center text-white">
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+</div>
+<!-- Notifications -->
+<div class="bg-white rounded-xl p-md shadow-sm border border-surface-container-low flex items-center justify-between active:scale-[0.98] transition-all">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 bg-tertiary-fixed/30 rounded-lg flex items-center justify-center text-tertiary-container relative">
+<span class="material-symbols-outlined text-headline-md">notifications</span>
+<div class="absolute -top-1 -right-1 w-4 h-4 bg-error rounded-full border-2 border-white text-[10px] flex items-center justify-center text-white font-bold">1</div>
+</div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Provider Notifications</h4>
+<p class="text-label-sm text-on-surface-variant">Stay updated with important alerts</p>
+</div>
+</div>
+<div class="w-10 h-10 bg-tertiary-container rounded-full flex items-center justify-center text-white">
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+</div>
+<!-- Complaints -->
+<div class="bg-white rounded-xl p-md shadow-sm border border-surface-container-low flex items-center justify-between active:scale-[0.98] transition-all">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 bg-error-container/30 rounded-lg flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-headline-md">gavel</span>
+</div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Shikayat Darj Karein</h4>
+<p class="text-label-sm text-on-surface-variant">Report any service issues</p>
+</div>
+</div>
+<div class="w-10 h-10 bg-error rounded-full flex items-center justify-center text-white">
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Footer Utility -->
+<footer class="mt-lg bg-surface-container-low rounded-xl p-sm flex flex-col md:flex-row items-center justify-between gap-xs text-center border border-outline-variant/10">
+<div class="flex items-center gap-xs text-secondary">
+<span class="material-symbols-outlined text-label-md">verified_user</span>
+<span class="text-label-sm font-label-sm">Trusted Services. Verified Providers.</span>
+</div>
+<div class="flex items-center gap-xs text-primary">
+<span class="material-symbols-outlined text-label-md">group</span>
+<span class="text-label-sm font-label-sm font-bold">Agents 24/7</span>
+</div>
+</footer>
+</main>
+</body></html>

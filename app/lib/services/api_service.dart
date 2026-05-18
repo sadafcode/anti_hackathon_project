@@ -138,6 +138,20 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> resolveDispute(String disputeId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/dispute/resolve'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'dispute_id': disputeId}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to resolve dispute: ${response.body}');
+    }
+  }
+
   static Future<Map<String, dynamic>> registerProvider(Map<String, dynamic> providerData) async {
     final response = await http.post(
       Uri.parse('$baseUrl/provider/register'),

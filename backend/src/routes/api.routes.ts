@@ -917,99 +917,175 @@ router.post('/dispute', async (req, res) => {
       dispute_type,
       provider,
       original_price,
-      overcharged_amount,
-      extra_charge_amount,
-      hours_before_job,
-      language_detected,
     } = req.body;
 
     const resolvedUserId = user_id || 'guest';
     const resolvedIssueType = issue_type || dispute_type || 'other';
-    const resolvedDescription = description || req.body.description || '';
+    const resolvedDescription = description || '';
 
-    if (!booking_id) {
-      // Log dispute in Firestore under 'disputes' with status 'no_booking_reference'
-      const db = getFirestoreDb();
-      const disputeId = 'DISP-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-      
-      try {
-        await db.collection('disputes').doc(disputeId).set({
-          dispute_id: disputeId,
-          booking_id: null,
-          user_id: resolvedUserId,
-          issue_type: resolvedIssueType,
-          description: resolvedDescription,
-          status: 'no_booking_reference',
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      } catch (err: any) {
-        console.error('[Dispute] Firestore log error:', err.message);
-      }
-
-      return res.json({
-        success: true,
-        dispute_id: disputeId,
-        status: 'no_booking_reference',
-        resolution: 'Aap ka dispute darj ho gaya. 24 ghante mein jawab milega.'
-      });
-    }
-
-    // Otherwise booking_id is present - log and run agent resolution
     const db = getFirestoreDb();
     const disputeId = 'DISP-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-    try {
-      await db.collection('disputes').doc(disputeId).set({
-        dispute_id: disputeId,
-        booking_id: booking_id,
-        user_id: resolvedUserId,
-        issue_type: resolvedIssueType,
-        description: resolvedDescription,
-        status: 'pending',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    } catch (err: any) {
-      console.error('[Dispute] Firestore log error:', err.message);
+
+    let resolvedProviderId = provider?.id || req.body.provider_id || null;
+    let resolvedOriginalPrice = original_price || 0;
+
+    if (booking_id) {
+      try {
+        const bookingDoc = await db.collection('bookings').doc(booking_id).get();
+        if (bookingDoc.exists) {
+          const bookingData = bookingDoc.data();
+          if (bookingData) {
+            resolvedProviderId = bookingData.provider_id || resolvedProviderId;
+            resolvedOriginalPrice = bookingData.amount || resolvedOriginalPrice;
+          }
+        }
+      } catch (err: any) {
+        console.error('[Dispute] Booking fetch error during submission:', err.message);
+      }
     }
 
-    const prompt = `Resolve this customer dispute:
+    // Always log dispute under pending_provider_response when booking is referenced
+    const status = booking_id ? 'pending_provider_response' : 'no_booking_reference';
 
-DISPUTE TYPE: ${dispute_type || resolvedIssueType}
+    await db.collection('disputes').doc(disputeId).set({
+      dispute_id: disputeId,
+      booking_id: booking_id || null,
+      user_id: resolvedUserId,
+      provider_id: resolvedProviderId,
+      issue_type: resolvedIssueType,
+      description: resolvedDescription,
+      status: status,
+      original_price: resolvedOriginalPrice,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
-PROVIDER:
-- ID: ${provider?.id}
-- Name: ${provider?.name}
-- Current Strikes: ${provider?.strikes || 0}
+    res.json({
+      success: true,
+      dispute_id: disputeId,
+      status: status,
+      resolution: booking_id 
+        ? 'Dispute filed. Awaiting provider response.' 
+        : 'Aap ka dispute darj ho gaya. 24 ghante mein jawab milega.'
+    });
+  } catch (error: any) {
+    console.error('[/dispute]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/dispute/resolve', async (req, res) => {
+  try {
+    const { dispute_id } = req.body;
+    if (!dispute_id) {
+      return res.status(400).json({ error: 'dispute_id is required' });
+    }
+
+    const db = getFirestoreDb();
+    const disputeDoc = await db.collection('disputes').doc(dispute_id).get();
+    if (!disputeDoc.exists) {
+      return res.status(404).json({ error: 'Dispute not found' });
+    }
+
+    const dispute = disputeDoc.data();
+    if (!dispute) {
+      return res.status(404).json({ error: 'Dispute has no data' });
+    }
+
+    // 1. Fetch exact agreed price from booking document (never hallucinate price!)
+    let originalPrice = dispute.original_price || 1500;
+    if (dispute.booking_id) {
+      try {
+        const bookingDoc = await db.collection('bookings').doc(dispute.booking_id).get();
+        if (bookingDoc.exists) {
+          const bookingData = bookingDoc.data();
+          if (bookingData && typeof bookingData.amount === 'number') {
+            originalPrice = bookingData.amount;
+          }
+        }
+      } catch (err: any) {
+        console.error('[Dispute Resolve] Booking fetch error:', err.message);
+      }
+    }
+
+    // 2. Fetch provider info to get latest strikes/rating/etc.
+    let providerData: any = null;
+    if (dispute.provider_id) {
+      try {
+        const providerDoc = await db.collection('providers').doc(dispute.provider_id).get();
+        if (providerDoc.exists) {
+          providerData = providerDoc.data();
+        }
+      } catch (err: any) {
+        console.error('[Dispute Resolve] Provider fetch error:', err.message);
+      }
+    }
+
+    // 3. Construct Dispute Agent prompt
+    const prompt = `Resolve this customer dispute after provider defense has been submitted:
+
+DISPUTE TYPE: ${dispute.issue_type}
+USER COMPLAINT: ${dispute.description}
+PROVIDER DEFENSE/RESPONSE: ${dispute.provider_response || 'No response submitted.'}
+
+PROVIDER DETAILS:
+- ID: ${dispute.provider_id || 'unknown'}
+- Name: ${providerData?.name || 'Provider'}
+- Current Strikes: ${providerData?.strikes || 0}
 
 FINANCIAL DETAILS:
-- Original Booking Price: Rs.${original_price || 0}
-${(dispute_type || resolvedIssueType) === 'price_disagreement' ? `- Amount Overcharged: Rs.${overcharged_amount || 0}` : ''}
-${(dispute_type || resolvedIssueType) === 'overrun' ? `- Extra Charge Requested: Rs.${extra_charge_amount || 0}` : ''}
-${(dispute_type || resolvedIssueType) === 'cancellation' ? `- Hours Before Job When Cancelled: ${hours_before_job || 0}` : ''}
+- Original Agreed Price: Rs.${originalPrice}
+- Overcharged Amount: Rs.${dispute.overcharged_amount || 0}
 
-LANGUAGE: ${language_detected || 'roman_urdu'}
-
-Follow these steps:
-1. Call get_dispute_policy for ${dispute_type || resolvedIssueType}
-2. Apply any required system actions (strike/penalty tools)
-3. Calculate the exact refund amount
-4. Write a clear, empathetic resolution in ${language_detected || 'Roman Urdu'}`;
+Follow the rules and evaluation criteria strictly. Do not hallucinate any price details. Decide a fair resolution and calculate a refund (0% to 100% of Original Agreed Price) based on the strength of the provider's defense.`;
 
     const result = await run(disputeAgent, prompt, { maxTurns: 20 });
     const finalOutput = result.finalOutput as any;
 
+    const updatedStatus = finalOutput.status || 'resolved';
+    const finalResolution = finalOutput.resolution || '';
+    const refundAmount = finalOutput.refund_amount || 0;
+
+    // 4. Update Dispute in Firestore
+    await db.collection('disputes').doc(dispute_id).update({
+      status: updatedStatus,
+      resolution: finalResolution,
+      refund_amount: refundAmount,
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 5. Send FCM Push Notifications to both parties
     try {
-      await db.collection('disputes').doc(disputeId).update({
-        status: finalOutput.status || 'resolved',
-        resolution: finalOutput.resolution || '',
-        refund_amount: finalOutput.refund_amount || 0,
-      });
-    } catch (err: any) {
-      console.error('[Dispute] Firestore update error:', err.message);
+      const clientFcmToken = await getClientFcmToken(dispute.user_id);
+      const providerFcmToken = await getProviderFcmToken(dispute.provider_id);
+
+      if (clientFcmToken) {
+        await sendPushNotification(
+          clientFcmToken,
+          'Dispute Resolved',
+          `Aapka dispute resolve ho gaya hai. Faisla: ${finalResolution}`
+        );
+      }
+
+      if (providerFcmToken) {
+        await sendPushNotification(
+          providerFcmToken,
+          'Dispute Resolved',
+          `Dispute resolve ho gaya hai. Refund amount: Rs.${refundAmount}`
+        );
+      }
+    } catch (fcmErr: any) {
+      console.error('[Dispute Resolve] FCM notification warning:', fcmErr.message);
     }
 
-    res.json(finalOutput);
+    res.json({
+      success: true,
+      dispute_id,
+      status: updatedStatus,
+      resolution: finalResolution,
+      refund_amount: refundAmount,
+    });
   } catch (error: any) {
-    console.error('[/dispute]', error.message);
+    console.error('[/dispute/resolve]', error.message);
     res.status(500).json({ error: error.message });
   }
 });

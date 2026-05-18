@@ -147,6 +147,8 @@ class _BookingConfirmationScreenState
             _buildCountdownCard(),
             const SizedBox(height: 12),
             _buildNotificationsCard(),
+            const SizedBox(height: 12),
+            _buildImportantNoticeCard(),
             const SizedBox(height: 28),
             _buildHomeButton(context),
             const SizedBox(height: 12),
@@ -479,6 +481,71 @@ class _BookingConfirmationScreenState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildImportantNoticeCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade300, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Important Notice',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _bulletRow('If you request additional work beyond the original booking, extra charges will apply.'),
+                const SizedBox(height: 6),
+                _bulletRow('You cannot file a dispute for extra charges caused by additional work you requested — this is platform policy.'),
+                const SizedBox(height: 6),
+                _bulletRow('Always confirm the scope and price with the provider before work begins.'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bulletRow(String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '• ',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.amber.shade900,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF451A03),
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

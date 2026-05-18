@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -755,12 +756,37 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                 children: [
                   const Text('Booking ID',
                       style: TextStyle(color: Colors.white60, fontSize: 11)),
-                  Text(bookingId,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(bookingId,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2)),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.copy_rounded,
+                          color: Colors.white70,
+                          size: 14,
+                        ),
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        splashRadius: 16,
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: bookingId));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Booking ID copy ho gaya!'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

@@ -21,6 +21,9 @@ class _ProviderNotificationScreenState
     with TickerProviderStateMixin {
   _Phase _phase = _Phase.pending;
 
+  final Map<String, TextEditingController> _responseControllers = {};
+  final Map<String, bool> _submittingDisputes = {};
+
   // Smart timeout: 30 min for urgent (same day), 1 hour for advance bookings
   // In real app this would come from booking data. For demo: 3600s (1 hour).
   static const int _totalSeconds = 3600;
@@ -275,7 +278,28 @@ class _ProviderNotificationScreenState
       return const Center(child: CircularProgressIndicator());
     }
     if (_realBooking == null) {
-      return const Center(child: Text('No pending bookings.'));
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Card(
+              margin: EdgeInsets.only(bottom: 24),
+              color: Colors.white,
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(
+                  child: Text(
+                    'Abhi koi naya booking request nahi hai.',
+                    style: TextStyle(fontSize: 14, color: AppTheme.textGrey, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ),
+            _buildDisputesSection(),
+          ],
+        ),
+      );
     }
 
     return switch (_phase) {
@@ -302,6 +326,8 @@ class _ProviderNotificationScreenState
           _buildAcceptButton(),
           const SizedBox(height: 10),
           _buildDeclineButton(),
+          const SizedBox(height: 24),
+          _buildDisputesSection(),
           const SizedBox(height: 16),
         ],
       ),
@@ -772,6 +798,8 @@ class _ProviderNotificationScreenState
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            _buildDisputesSection(),
             const SizedBox(height: 16),
           ],
         ),
@@ -1077,4 +1105,331 @@ class _ProviderNotificationScreenState
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Divider(color: Colors.grey.shade100, height: 1),
       );
+
+  Widget _buildDisputesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.gavel_outlined, color: AppTheme.primary, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Aapke Disputes',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textDark,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('disputes')
+              .where('provider_id', isEqualTo: widget.providerId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Text('Error: ${snapshot.error}', style: const TextStyle(fontSize: 12, color: Colors.red));
+            }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+            }
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade100),
+                ),
+                child: const Center(
+                  child: Text(
+                    'Koi khula dispute nahi hai.',
+                    style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
+                  ),
+                ),
+              );
+            }
+
+            // Sort in memory by createdAt descending
+            final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+            sortedDocs.sort((a, b) {
+              final aTime = a.data()['createdAt'] as Timestamp?;
+              final bTime = b.data()['createdAt'] as Timestamp?;
+              if (aTime == null && bTime == null) return 0;
+              if (aTime == null) return 1;
+              if (bTime == null) return -1;
+              return bTime.compareTo(aTime);
+            });
+
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sortedDocs.length,
+              itemBuilder: (context, index) {
+                final doc = sortedDocs[index];
+                return _buildDisputeItemCard(doc.id, doc.data());
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDisputeItemCard(String disputeId, Map<String, dynamic> dispute) {
+    final status = dispute['status'] ?? 'pending_provider_response';
+    final issue = dispute['issue_type'] ?? 'other';
+    final description = dispute['description'] ?? '';
+    final bookingId = dispute['booking_id'] ?? 'N/A';
+    final providerResponse = dispute['provider_response'] ?? '';
+    final resolution = dispute['resolution'] ?? '';
+    final refund = dispute['refund_amount'] ?? 0;
+
+    Color badgeColor;
+    String statusText;
+    switch (status) {
+      case 'pending_provider_response':
+        badgeColor = Colors.orange.shade700;
+        statusText = 'Aapka Jawab Chahiye';
+        break;
+      case 'pending_review':
+        badgeColor = Colors.blue.shade700;
+        statusText = 'Review Mein Hai';
+        break;
+      case 'resolved':
+        badgeColor = Colors.green.shade700;
+        statusText = 'Resolved';
+        break;
+      default:
+        badgeColor = Colors.grey.shade700;
+        statusText = status.toString();
+    }
+
+    if (!_responseControllers.containsKey(disputeId)) {
+      _responseControllers[disputeId] = TextEditingController();
+    }
+
+    final isSubmitting = _submittingDisputes[disputeId] ?? false;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'ID: $bookingId',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textDark,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: badgeColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _detailRow(Icons.report_problem_outlined, 'Customer Complaint:', issue.toString().replaceAll('_', ' ')),
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 4, bottom: 8),
+              child: Text(
+                description,
+                style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
+              ),
+            ),
+            if (status == 'pending_provider_response') ...[
+              const Divider(),
+              const SizedBox(height: 8),
+              const Text(
+                'Aapka Jawab / Safai:',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _responseControllers[disputeId],
+                maxLines: 3,
+                style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
+                decoration: InputDecoration(
+                  hintText: 'Apni safai likhein (e.g. Maine kaam sahi kiya tha...)',
+                  hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.all(10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => _submitProviderResponse(disputeId),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Jawab Submit Karo',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+            if (status == 'pending_review') ...[
+              const Divider(),
+              const SizedBox(height: 8),
+              _detailRow(Icons.reply_outlined, 'Aapka Jawab:', ''),
+              Padding(
+                padding: const EdgeInsets.only(left: 24, top: 4),
+                child: Text(
+                  providerResponse,
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textGrey, fontStyle: FontStyle.italic),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.hourglass_empty, size: 14, color: Colors.blue.shade800),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Gemini AI is reviewing the dispute...',
+                        style: TextStyle(fontSize: 12, color: Colors.blue.shade800, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (status == 'resolved') ...[
+              const Divider(),
+              const SizedBox(height: 8),
+              if (providerResponse.isNotEmpty) ...[
+                _detailRow(Icons.reply_outlined, 'Aapka Jawab:', ''),
+                Padding(
+                  padding: const EdgeInsets.only(left: 24, top: 4, bottom: 8),
+                  child: Text(
+                    providerResponse,
+                    style: const TextStyle(fontSize: 13, color: AppTheme.textGrey, fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ],
+              _detailRow(Icons.gavel, 'Faisla (Resolution):', ''),
+              Padding(
+                padding: const EdgeInsets.only(left: 24, top: 4, bottom: 8),
+                child: Text(
+                  resolution,
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textDark, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (refund > 0)
+                _detailRow(Icons.money_off, 'Refunded amount:', 'Rs. $refund', valueColor: Colors.red.shade700),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitProviderResponse(String disputeId) async {
+    final responseText = _responseControllers[disputeId]?.text.trim() ?? '';
+    if (responseText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Safai / Jawab likhna lazmi hai')),
+      );
+      return;
+    }
+
+    setState(() {
+      _submittingDisputes[disputeId] = true;
+    });
+
+    try {
+      // 1. Update Firestore
+      await FirebaseFirestore.instance.collection('disputes').doc(disputeId).update({
+        'provider_response': responseText,
+        'status': 'pending_review',
+      });
+
+      // 2. Call backend /dispute/resolve API which runs Gemini AI in Stage 3
+      await ApiService.resolveDispute(disputeId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Jawab submit ho gaya aur AI resolution run ho gaya!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submit error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submittingDisputes[disputeId] = false;
+        });
+      }
+    }
+  }
 }

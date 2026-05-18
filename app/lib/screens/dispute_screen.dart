@@ -31,6 +31,11 @@ class _DisputeScreenState extends State<DisputeScreen>
   late AnimationController _successController;
   late Animation<double> _successScale;
 
+  Map<String, dynamic>? _fetchedBooking;
+  Map<String, dynamic>? _fetchedProvider;
+  bool _isFetchingBooking = false;
+  String? _fetchError;
+
   final List<_IssueType> _issues = [
     _IssueType(
       key: 'no_show',
@@ -82,6 +87,11 @@ class _DisputeScreenState extends State<DisputeScreen>
       parent: _successController,
       curve: Curves.elasticOut,
     );
+
+    if (widget.bookingId != null) {
+      _bookingIdController.text = widget.bookingId!;
+      _fetchBookingDetails(widget.bookingId!);
+    }
   }
 
   @override
@@ -90,6 +100,63 @@ class _DisputeScreenState extends State<DisputeScreen>
     _bookingIdController.dispose();
     _successController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchBookingDetails(String bookingId) async {
+    if (bookingId.isEmpty) return;
+    setState(() {
+      _isFetchingBooking = true;
+      _fetchError = null;
+      _fetchedBooking = null;
+      _fetchedProvider = null;
+    });
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('bookings')
+          .doc(bookingId)
+          .get();
+
+      if (!doc.exists) {
+        setState(() {
+          _isFetchingBooking = false;
+          _fetchError = 'Yeh Booking ID nahi mili, check karein';
+        });
+        return;
+      }
+
+      final bookingData = doc.data();
+      if (bookingData != null) {
+        final providerId = bookingData['provider_id'] as String?;
+        Map<String, dynamic>? providerData;
+
+        if (providerId != null) {
+          final pDoc = await FirebaseFirestore.instance
+              .collection('providers')
+              .doc(providerId)
+              .get();
+          if (pDoc.exists) {
+            providerData = pDoc.data();
+          }
+        }
+
+        setState(() {
+          _fetchedBooking = bookingData;
+          _fetchedProvider = providerData;
+          _isFetchingBooking = false;
+        });
+      } else {
+        setState(() {
+          _isFetchingBooking = false;
+          _fetchError = 'Booking details empty hain';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isFetchingBooking = false;
+        _fetchError = 'Error fetching booking: $e';
+      });
+    }
   }
 
   bool _isSubmitting = false;
@@ -114,6 +181,17 @@ class _DisputeScreenState extends State<DisputeScreen>
       );
       return;
     }
+
+    final enteredBookingId = _bookingIdController.text.trim();
+    if (widget.bookingId == null && enteredBookingId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Booking ID daalna lazmi hai'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
@@ -125,53 +203,33 @@ class _DisputeScreenState extends State<DisputeScreen>
     );
     
     try {
-      final enteredBookingId = _bookingIdController.text.trim();
-      String? finalBookingId = widget.bookingId;
-      String? finalProviderId = widget.providerId;
-      Map<String, dynamic>? finalProviderData;
-      String? resolvedService;
-      String? resolvedCustomer;
-
-      if (finalBookingId == null && enteredBookingId.isNotEmpty) {
-        final doc = await FirebaseFirestore.instance
-            .collection('bookings')
-            .doc(enteredBookingId)
-            .get();
-
-        if (!doc.exists) {
-          if (mounted) {
-            Navigator.pop(context); // Close loader
-            setState(() => _isSubmitting = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Yeh Booking ID nahi mili, check karein'),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-          return;
-        }
-
-        final data = doc.data();
-        if (data != null) {
-          finalBookingId = enteredBookingId;
-          finalProviderId = data['provider_id'] as String?;
-          resolvedService = data['service'] as String?;
-          resolvedCustomer = data['user_id'] as String?;
-
-          if (finalProviderId != null) {
-            final pDoc = await FirebaseFirestore.instance
-                .collection('providers')
-                .doc(finalProviderId)
-                .get();
-            if (pDoc.exists) {
-              finalProviderData = pDoc.data();
-            }
-          }
-        }
+      String? finalBookingId = widget.bookingId ?? enteredBookingId;
+      
+      // If we haven't fetched the details yet, do a quick fetch
+      if (_fetchedBooking == null) {
+        await _fetchBookingDetails(finalBookingId);
       }
 
-      final providerObj = widget.provider?.toJson() ?? finalProviderData;
+      if (_fetchedBooking == null) {
+        if (mounted) {
+          Navigator.pop(context); // Close loader
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_fetchError ?? 'Yeh Booking ID nahi mili, check karein'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+
+      final finalProviderId = _fetchedBooking!['provider_id'] as String?;
+      final resolvedService = _fetchedBooking!['service_type'] as String?;
+      final resolvedCustomer = _fetchedBooking!['user_id'] as String?;
+      final agreedAmount = _fetchedBooking!['amount'] ?? 1500;
+
+      final providerObj = widget.provider?.toJson() ?? _fetchedProvider;
       final req = {
         'booking_id': finalBookingId,
         'provider_id': finalProviderId,
@@ -183,8 +241,8 @@ class _DisputeScreenState extends State<DisputeScreen>
         'dispute_type': _selectedIssue == 'quality' ? 'quality_complaint' : 
                         _selectedIssue == 'price' ? 'price_disagreement' : 
                         _selectedIssue,
-        'original_price': 1500, // mock price
-        'overcharged_amount': 500, // mock
+        'original_price': agreedAmount,
+        'overcharged_amount': 0, 
       };
       
       final res = await ApiService.submitDispute(req);
@@ -194,7 +252,7 @@ class _DisputeScreenState extends State<DisputeScreen>
         setState(() {
           _isSubmitting = false;
           _submitted = true;
-          _resolutionFromServer = res['resolution'] ?? _selected!.resolution;
+          _resolutionFromServer = res['resolution'] ?? 'Dispute filed. Awaiting provider response.';
         });
         _successController.forward();
       }
@@ -276,31 +334,146 @@ class _DisputeScreenState extends State<DisputeScreen>
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _bookingIdController,
-            decoration: InputDecoration(
-              hintText: 'e.g. BK-A1B2C3D4',
-              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _bookingIdController,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. BK-A1B2C3D4',
+                    hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppTheme.primary),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade200),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _isFetchingBooking
+                    ? null
+                    : () => _fetchBookingDetails(_bookingIdController.text.trim()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
+                child: _isFetchingBooking
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Check',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.primary),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
             'Booking ID receipt ya confirmation screen par milti hai',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
+          _buildFetchedBookingCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFetchedBookingCard() {
+    if (_isFetchingBooking) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+      );
+    }
+    if (_fetchError != null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.shade200),
+        ),
+        child: Text(
+          _fetchError!,
+          style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+        ),
+      );
+    }
+    if (_fetchedBooking == null) return const SizedBox.shrink();
+
+    final pName = _fetchedBooking!['provider_name'] ?? 'Provider';
+    final service = (_fetchedBooking!['service_type'] ?? _fetchedBooking!['service'] ?? 'Service').toString().replaceAll('_', ' ');
+    final amount = _fetchedBooking!['amount'] ?? 0;
+    final date = _fetchedBooking!['datetime'] ?? 'Kal';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_outlined, size: 16, color: AppTheme.primary),
+              const SizedBox(width: 6),
+              const Text(
+                'Booking Details found!',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _fetchedRow('Provider:', pName),
+          _fetchedRow('Service:', service),
+          _fetchedRow('Price:', 'Rs. $amount'),
+          _fetchedRow('Waqt:', date),
+        ],
+      ),
+    );
+  }
+
+  Widget _fetchedRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: AppTheme.textGrey, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 4),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 12, color: AppTheme.textDark, fontWeight: FontWeight.w700))),
         ],
       ),
     );
