@@ -1059,19 +1059,19 @@ Follow the rules and evaluation criteria strictly. Do not hallucinate any price 
       const providerFcmToken = await getProviderFcmToken(dispute.provider_id);
 
       if (clientFcmToken) {
-        await sendPushNotification(
-          clientFcmToken,
-          'Dispute Resolved',
-          `Aapka dispute resolve ho gaya hai. Faisla: ${finalResolution}`
-        );
+        await sendPushNotification({
+          token: clientFcmToken,
+          title: 'Dispute Resolved',
+          body: `Aapka dispute resolve ho gaya hai. Faisla: ${finalResolution}`,
+        });
       }
 
       if (providerFcmToken) {
-        await sendPushNotification(
-          providerFcmToken,
-          'Dispute Resolved',
-          `Dispute resolve ho gaya hai. Refund amount: Rs.${refundAmount}`
-        );
+        await sendPushNotification({
+          token: providerFcmToken,
+          title: 'Dispute Resolved',
+          body: `Dispute resolve ho gaya hai. Refund amount: Rs.${refundAmount}`,
+        });
       }
     } catch (fcmErr: any) {
       console.error('[Dispute Resolve] FCM notification warning:', fcmErr.message);
