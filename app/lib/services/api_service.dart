@@ -9,9 +9,20 @@ class ApiService {
       kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
   static String sessionId = const Uuid().v4();
 
+  // Accumulate Agent Traces globally across the entire UI flow
+  static List<Map<String, dynamic>> globalAgentTraces = [];
+
   // Last discovered providers from discovery API — used for auto-reschedule on decline
   static List<Map<String, dynamic>> lastDiscoveredProviders = [];
   static Map<String, dynamic>? lastConfirmedIntent;
+
+  static void _extractTraces(Map<String, dynamic> json) {
+    if (json.containsKey('agent_traces') && json['agent_traces'] is List) {
+      for (var t in json['agent_traces'] as List) {
+        globalAgentTraces.add(Map<String, dynamic>.from(t as Map));
+      }
+    }
+  }
 
   static Future<Map<String, dynamic>> sendMessage(String message) async {
     final response = await http.post(
@@ -21,7 +32,9 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final json = jsonDecode(response.body);
+      _extractTraces(json);
+      return json;
     } else {
       throw Exception('Failed to send message: ${response.body}');
     }
@@ -35,27 +48,49 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final json = jsonDecode(response.body);
+      _extractTraces(json);
+      return json;
     } else {
       throw Exception('Failed to discover providers: ${response.body}');
     }
   }
 
-  static Future<Map<String, dynamic>> getPricing(Map<String, dynamic> provider, Map<String, dynamic> intent, bool isReturningUser) async {
+  static Future<Map<String, dynamic>> getPricing(Map<String, dynamic> provider, Map<String, dynamic> intent, bool isReturningUser, {String? userId}) async {
     final response = await http.post(
       Uri.parse('$baseUrl/pricing'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'provider': provider,
         'intent': intent,
-        'is_returning_user': isReturningUser
+        'is_returning_user': isReturningUser,
+        'user_id': userId,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      _extractTraces(json);
+      return json;
+    } else {
+      throw Exception('Failed to get pricing: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> acceptContract(String contractId, String party) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/contract/accept'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'contract_id': contractId,
+        'party': party,
       }),
     );
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
-      throw Exception('Failed to get pricing: ${response.body}');
+      throw Exception('Failed to accept contract: ${response.body}');
     }
   }
 
@@ -67,7 +102,9 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final json = jsonDecode(response.body);
+      _extractTraces(json);
+      return json;
     } else {
       throw Exception('Failed to create booking: ${response.body}');
     }

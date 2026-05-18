@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/provider_session.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
+import 'dispute_screen.dart';
 import 'provider_notification_screen.dart';
 import 'provider_registration_screen.dart';
 
@@ -55,15 +56,15 @@ class _HomeScreenState extends State<HomeScreen>
             opacity: _fadeAnim,
             child: SlideTransition(
               position: _slideAnim,
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   children: [
-                    const Spacer(flex: 2),
+                    const SizedBox(height: 24),
                     _buildLogoSection(),
-                    const Spacer(flex: 3),
+                    const SizedBox(height: 28),
                     _buildButtons(context),
-                    const Spacer(flex: 1),
+                    const SizedBox(height: 20),
                     _buildFooter(),
                     const SizedBox(height: 16),
                   ],
@@ -152,6 +153,18 @@ class _HomeScreenState extends State<HomeScreen>
           title: 'Provider Hoon — Bookings Dekhein',
           subtitle: 'Incoming booking requests dekhein aur accept/decline karein',
           onTap: () => _openProviderScreen(context),
+        ),
+        const SizedBox(height: 14),
+        _ActionCard(
+          icon: Icons.gavel_rounded,
+          title: 'Shikayat Darj Karein',
+          subtitle: 'Kisi provider ya price par dispute/shikayat darj karein directly',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const DisputeScreen(),
+            ),
+          ),
         ),
       ],
     );

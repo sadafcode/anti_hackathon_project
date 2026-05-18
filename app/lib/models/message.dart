@@ -1,6 +1,7 @@
 import 'provider_model.dart';
+import 'pricing_model.dart';
 
-enum MessageType { user, agent, reasoning, providerCard }
+enum MessageType { user, agent, reasoning, providerCard, contract }
 
 class Message {
   final String id;
@@ -11,6 +12,8 @@ class Message {
   final String? serviceType;
   final String? locationHint;
   final String? requestedDatetime; // ISO string for availability day check
+  final PricingModel? pricing;
+  final String? contractId;
 
   Message({
     required this.id,
@@ -21,6 +24,8 @@ class Message {
     this.serviceType,
     this.locationHint,
     this.requestedDatetime,
+    this.pricing,
+    this.contractId,
   }) : timestamp = timestamp ?? DateTime.now();
 
   factory Message.user(String text) => Message(
@@ -55,5 +60,18 @@ class Message {
         type: MessageType.providerCard,
         provider: provider,
         requestedDatetime: requestedDatetime,
+      );
+
+  factory Message.contract({
+    required PricingModel pricing,
+    required String contractId,
+    required ProviderModel provider,
+  }) => Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: '',
+        type: MessageType.contract,
+        provider: provider,
+        pricing: pricing,
+        contractId: contractId,
       );
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/provider_model.dart';
+import 'agent_trace_screen.dart';
 import '../models/pricing_model.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
@@ -68,6 +69,15 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     );
 
     _listenToBooking();
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && _phase == _Phase.waiting) {
+        // Mock: provider accepted after 5 seconds
+        _pulseController.stop();
+        _successController.forward();
+        setState(() => _phase = _Phase.confirmed);
+      }
+    });
   }
 
   void _listenToBooking() {
@@ -178,6 +188,16 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
           title: Text(_appBarTitle),
           automaticallyImplyLeading: _phase != _Phase.waiting &&
               _phase != _Phase.rescheduling,
+          actions: [
+            IconButton(
+              tooltip: 'Agent Trace',
+              icon: const Icon(Icons.account_tree_outlined, color: Colors.white),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AgentTraceScreen()),
+              ),
+            ),
+          ],
         ),
         body: AnimatedSwitcher(
           duration: const Duration(milliseconds: 400),

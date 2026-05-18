@@ -10,11 +10,15 @@ import 'booking_waiting_screen.dart';
 class PricingScreen extends StatelessWidget {
   final ProviderModel provider;
   final PricingModel pricing;
+  final String contractId;
+  final void Function(PricingModel pricing, String contractId) onContractCreated;
 
   PricingScreen({
     super.key,
     required this.provider,
     PricingModel? pricing,
+    required this.contractId,
+    required this.onContractCreated,
   }) : pricing = pricing ?? PricingModel.fromProvider(provider);
 
   @override
@@ -489,83 +493,9 @@ class PricingScreen extends StatelessWidget {
     );
   }
 
-  void _acceptPrice(BuildContext context) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      final requestedDatetime =
-          DateTime.now().add(const Duration(days: 1)).toIso8601String();
-      final mockIntent = {
-        'service_type': provider.serviceTypes.isNotEmpty
-            ? provider.serviceTypes.first
-            : 'other',
-        'location': {'area': provider.area, 'city': 'Islamabad'},
-        'datetime': requestedDatetime,
-        'urgency': 'medium',
-        'budget_sensitive': false,
-        'job_complexity': 'basic'
-      };
-
-      final req = {
-        'provider': provider.toJson(),
-        'intent': mockIntent,
-        'pricing': {'base_rate': pricing.baseRate, 'total': pricing.total},
-        'mock_action': 'accept'
-      };
-
-      final response = await ApiService.createBooking(req);
-
-      if (!context.mounted) return;
-      Navigator.pop(context); // close loading
-
-      if (response['status'] == 'conflict_waitlist') {
-        _showConflictDialog(context, response);
-        return;
-      }
-
-      final providerId = response['provider_id'] as String? ?? '';
-      final bookingId = response['booking_id'] as String? ?? '';
-
-      // Save to Firestore
-      if (providerId.isNotEmpty && bookingId.isNotEmpty) {
-        try {
-          await BookingFirestoreService.createBooking(
-            bookingId: bookingId,
-            providerId: providerId,
-            providerName: provider.name,
-            serviceType: provider.serviceTypes.isNotEmpty
-                ? provider.serviceTypes.first
-                : 'service',
-            area: provider.area,
-            amount: pricing.total,
-            datetime: requestedDatetime,
-          );
-        } catch (_) {}
-      }
-
-      if (!context.mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => BookingWaitingScreen(
-            bookingId: bookingId,
-            providerId: providerId,
-            provider: provider,
-            pricing: pricing,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
+  void _acceptPrice(BuildContext context) {
+    onContractCreated(pricing, contractId);
+    Navigator.pop(context); // Close PricingScreen
   }
 
   void _showConflictDialog(

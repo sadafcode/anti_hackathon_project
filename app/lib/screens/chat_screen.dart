@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../models/message.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/provider_card_bubble.dart';
+import '../widgets/micro_contract_card.dart';
 import '../widgets/reasoning_panel.dart';
 import '../widgets/typing_indicator.dart';
 import 'map_picker_screen.dart';
@@ -24,17 +26,21 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Message> _messages = [];
   bool _isTyping = false;
   bool _isListening = false;
+  
+  final SpeechToText _speech = SpeechToText();
+  bool _speechEnabled = false;
+  String _selectedLocale = 'ur-PK';
 
   List<ProviderModel>? _currentProviders;
   int _currentProviderIndex = 0;
 
-  // Traces collected from backend during the last full pipeline run
-  final List<Map<String, dynamic>> _collectedTraces = [];
   String _lastUserMessage = '';
+  bool _clearTracesOnNextMessage = false;
 
   @override
   void initState() {
     super.initState();
+    _initSpeech();
     _addWelcomeMessage();
   }
 
@@ -46,33 +52,34 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _sendMessage() async {
-    final text = _inputController.text.trim();
+  void _sendMessage([String? overrideText]) async {
+    final text = (overrideText ?? _inputController.text).trim();
     if (text.isEmpty) return;
+
+    if (_isListening) {
+      _speech.stop();
+      setState(() {
+        _isListening = false;
+      });
+    }
+
+    if (_clearTracesOnNextMessage) {
+      ApiService.globalAgentTraces.clear();
+      _clearTracesOnNextMessage = false;
+    }
 
     setState(() {
       _messages.add(Message.user(text));
       _inputController.clear();
       _isTyping = true;
       _lastUserMessage = text;
-      _collectedTraces.clear();
     });
     _scrollToBottom();
 
     try {
       final response = await ApiService.sendMessage(text);
 
-      // Collect NLU + Intent traces
-      final traces = response['_traces'] as Map<String, dynamic>?;
-      if (traces != null) {
-        if (traces['nlu'] != null) {
-          _collectedTraces.add(Map<String, dynamic>.from(traces['nlu'] as Map));
-        }
-        if (traces['intent'] != null) {
-          _collectedTraces
-              .add(Map<String, dynamic>.from(traces['intent'] as Map));
-        }
-      }
+      // Agent Traces are now accumulated globally in ApiService
 
       final intentStatus = response['intent']['status'];
       
@@ -84,6 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _scrollToBottom();
       } else if (intentStatus == 'complete') {
+        _clearTracesOnNextMessage = true;
         final confirmedIntent = response['intent']['confirmed_intent'];
         final lang = response['nlu']?['language_detected'] ?? 'roman_urdu';
         String searchMsg;
@@ -104,12 +112,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
         // Trigger discovery
         final discoveryResp = await ApiService.discoverProviders(confirmedIntent);
-
-        // Collect discovery trace
-        final discTrace = discoveryResp['_trace'] as Map<String, dynamic>?;
-        if (discTrace != null) {
-          _collectedTraces.add(Map<String, dynamic>.from(discTrace));
-        }
 
         if (discoveryResp['status'] == 'no_providers') {
            setState(() {
@@ -212,26 +214,107 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _toggleMic() {
-    setState(() => _isListening = !_isListening);
-    if (_isListening) {
+  void _initSpeech() async {
+    try {
+      final available = await _speech.initialize(
+        onError: (val) {
+          debugPrint('Speech error: $val');
+          if (mounted) {
+            setState(() => _isListening = false);
+          }
+        },
+        onStatus: (val) {
+          debugPrint('Speech status: $val');
+          if (val == 'done' || val == 'notListening') {
+            if (mounted && _isListening) {
+              setState(() => _isListening = false);
+              final text = _inputController.text.trim();
+              _speech.cancel();
+              _inputController.clear();
+              if (text.isNotEmpty) {
+                _sendMessage(text);
+              }
+            }
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _speechEnabled = available;
+        });
+      }
+    } catch (e) {
+      debugPrint('Speech initialize catch error: $e');
+    }
+  }
+
+  void _toggleLocale() {
+    setState(() {
+      _selectedLocale = _selectedLocale == 'ur-PK' ? 'en-US' : 'ur-PK';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _selectedLocale == 'ur-PK'
+              ? 'Urdu (اردو) selected for voice input.'
+              : 'English / Roman Urdu selected for voice input.',
+        ),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _toggleMic() async {
+    if (!_speechEnabled) {
+      _initSpeech();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Sun raha hoon... (Voice input — coming soon)'),
+          content: const Text('Initializing speech recognition...'),
           backgroundColor: AppTheme.primary,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 1),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _isListening = false);
+      return;
+    }
+
+    if (_isListening) {
+      await _speech.stop();
+      // The onStatus callback will handle setting _isListening = false and calling _sendMessage()
+    } else {
+      setState(() {
+        _isListening = true;
+        // Do NOT clear _inputController.text as per user request
       });
+      try {
+        await _speech.listen(
+          onResult: (result) {
+            if (!mounted || !_isListening) return;
+            setState(() {
+              _inputController.text = result.recognizedWords;
+            });
+          },
+          listenFor: const Duration(seconds: 10),
+          pauseFor: const Duration(seconds: 2),
+          localeId: _selectedLocale,
+        );
+      } catch (e) {
+        debugPrint('Speech listen failed: $e');
+        if (mounted) {
+          setState(() {
+            _isListening = false;
+          });
+        }
+      }
     }
   }
 
   @override
   void dispose() {
+    _speech.stop();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -270,20 +353,7 @@ class _ChatScreenState extends State<ChatScreen> {
             icon: const Icon(Icons.account_tree_outlined, color: Colors.white),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => AgentTraceScreen(
-                  userMessage: _lastUserMessage.isNotEmpty
-                      ? _lastUserMessage
-                      : (_messages.isNotEmpty
-                          ? (_messages.firstWhere(
-                              (m) => m.type == MessageType.user,
-                              orElse: () => _messages.first,
-                            ).text)
-                          : 'AC bilkul kaam nahi kar raha, kal subah G-13 mein technician chahiye'),
-                  liveTraces:
-                      _collectedTraces.isNotEmpty ? List.from(_collectedTraces) : null,
-                ),
-              ),
+              MaterialPageRoute(builder: (_) => const AgentTraceScreen()),
             ),
           ),
           IconButton(
@@ -303,6 +373,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(top: 12, bottom: 8),
               itemCount: _messages.length + (_isTyping ? 1 : 0),
               itemBuilder: (context, index) {
@@ -325,6 +396,22 @@ class _ChatScreenState extends State<ChatScreen> {
                       provider: msg.provider!,
                       onShowAlternative: _showNextProvider,
                       requestedDatetime: msg.requestedDatetime,
+                      onContractCreated: (pricing, contractId) {
+                        setState(() {
+                          _messages.add(Message.contract(
+                            pricing: pricing,
+                            contractId: contractId,
+                            provider: msg.provider!,
+                          ));
+                        });
+                        _scrollToBottom();
+                      },
+                    );
+                  case MessageType.contract:
+                    return MicroContractCard(
+                      contractId: msg.contractId!,
+                      provider: msg.provider!,
+                      pricing: msg.pricing!,
                     );
                 }
               },
@@ -382,6 +469,26 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                     const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: _toggleLocale,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Text(
+                          _selectedLocale == 'ur-PK' ? 'اردو' : 'EN',
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -397,32 +504,102 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-class _MicButton extends StatelessWidget {
+class _MicButton extends StatefulWidget {
   final bool isListening;
   final VoidCallback onTap;
 
   const _MicButton({required this.isListening, required this.onTap});
 
   @override
+  State<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends State<_MicButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+    _pulse = Tween<double>(begin: 1.0, end: 1.35).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    if (widget.isListening) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _MicButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isListening != oldWidget.isListening) {
+      if (widget.isListening) {
+        _controller.repeat();
+      } else {
+        _controller.stop();
+        _controller.reset();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: isListening ? Colors.red : Colors.grey.shade100,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isListening ? Colors.red.shade300 : Colors.grey.shade300,
-          ),
-        ),
-        child: Icon(
-          isListening ? Icons.mic : Icons.mic_none,
-          color: isListening ? Colors.white : AppTheme.textGrey,
-          size: 20,
-        ),
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              if (widget.isListening)
+                Container(
+                  width: 44 * _pulse.value,
+                  height: 44 * _pulse.value,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.4 * (1.0 - (_pulse.value - 1.0) / 0.35)),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: widget.isListening ? Colors.red : Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: widget.isListening ? Colors.red.shade300 : Colors.grey.shade300,
+                  ),
+                  boxShadow: widget.isListening
+                      ? [
+                          BoxShadow(
+                            color: Colors.red.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            spreadRadius: 2,
+                          )
+                        ]
+                      : [],
+                ),
+                child: Icon(
+                  widget.isListening ? Icons.mic : Icons.mic_none,
+                  color: widget.isListening ? Colors.white : AppTheme.primary,
+                  size: 20,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

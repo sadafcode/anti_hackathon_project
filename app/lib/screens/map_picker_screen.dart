@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
 import '../data/mock_providers.dart';
 import '../theme/app_theme.dart';
+import '../utils/location_helper.dart';
 
 class MapPickerScreen extends StatefulWidget {
   const MapPickerScreen({super.key});
@@ -17,22 +19,6 @@ class MapPickerScreen extends StatefulWidget {
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
   static const LatLng _islamabadCenter = LatLng(33.7215, 73.0433);
-
-  // Same key as index.html — must have Places + Geocoding APIs enabled
-  static const _apiKey = 'AIzaSyBheiA4FKGRzZK9rKpMEm8bKTOtjH9D2YM';
-
-  static const Map<String, LatLng> _sectorCoords = {
-    'G-11': LatLng(33.7215, 73.0433),
-    'G-13': LatLng(33.6844, 73.0479),
-    'F-10': LatLng(33.7121, 72.9754),
-    'F-8': LatLng(33.7273, 72.9902),
-    'I-8': LatLng(33.6738, 73.0781),
-    'G-9': LatLng(33.7032, 73.0272),
-    'F-7': LatLng(33.7294, 72.9756),
-    'E-7': LatLng(33.7389, 73.0001),
-    'H-8': LatLng(33.6890, 73.0150),
-    'I-10': LatLng(33.6640, 73.0350),
-  };
 
   GoogleMapController? _mapController;
   LatLng _currentCenter = _islamabadCenter;
@@ -51,6 +37,20 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   void initState() {
     super.initState();
     _buildMarkers();
+    _initUserLocation();
+  }
+
+  Future<void> _initUserLocation() async {
+    final loc = await getUserWebLocation();
+    if (loc != null && mounted) {
+      _currentCenter = loc;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mapController?.moveCamera(
+          CameraUpdate.newLatLngZoom(loc, 14),
+        );
+      });
+      _reverseGeocode(loc);
+    }
   }
 
   @override
@@ -65,12 +65,13 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     final markers = <Marker>{};
     for (var i = 0; i < mockProviders.length; i++) {
       final p = mockProviders[i];
-      final base = _sectorCoords[p.area];
-      if (base == null) continue;
+      final lat = p.coordinates['lat'] as double?;
+      final lng = p.coordinates['lng'] as double?;
+      if (lat == null || lng == null) continue;
       final jitter = i * 0.0018;
       markers.add(Marker(
         markerId: MarkerId(p.id),
-        position: LatLng(base.latitude + jitter, base.longitude - jitter),
+        position: LatLng(lat + jitter, lng - jitter),
         icon: BitmapDescriptor.defaultMarkerWithHue(
           p.blueTick ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange,
         ),
@@ -95,11 +96,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 450), () async {
+      final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
       final url = Uri.parse(
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-        '?input=${Uri.encodeComponent(query)}'
-        '&key=$_apiKey'
-        '&components=country:pk',
+        '$baseUrl/api/places/autocomplete'
+        '?input=${Uri.encodeComponent(query)}',
       );
       try {
         final resp = await http.get(url);
@@ -132,11 +132,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     });
     FocusScope.of(context).unfocus();
 
-    // Forward-geocode to get LatLng for the selected suggestion
+    // Forward-geocode to get LatLng for the selected suggestion via proxy
+    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
     final url = Uri.parse(
-      'https://maps.googleapis.com/maps/api/geocode/json'
-      '?address=${Uri.encodeComponent(desc)}'
-      '&key=$_apiKey',
+      '$baseUrl/api/places/geocode'
+      '?address=${Uri.encodeComponent(desc)}',
     );
     try {
       final resp = await http.get(url);
@@ -149,12 +149,73 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           final lat = (loc['lat'] as num).toDouble();
           final lng = (loc['lng'] as num).toDouble();
           _currentCenter = LatLng(lat, lng);
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(_currentCenter, 14),
-          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _mapController?.moveCamera(
+              CameraUpdate.newLatLngZoom(_currentCenter, 14),
+            );
+          });
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _searchAndGo(String query) async {
+    if (query.trim().isEmpty) return;
+
+    setState(() {
+      _suggestions = [];
+      _showSuggestions = false;
+    });
+    FocusScope.of(context).unfocus();
+
+    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
+    final url = Uri.parse(
+      '$baseUrl/api/places/geocode'
+      '?address=${Uri.encodeComponent(query)}',
+    );
+    try {
+      final resp = await http.get(url);
+      if (!mounted) return;
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final results = data['results'] as List? ?? [];
+        if (results.isNotEmpty) {
+          final loc = (results[0]['geometry'] as Map)['location'] as Map;
+          final lat = (loc['lat'] as num).toDouble();
+          final lng = (loc['lng'] as num).toDouble();
+          final formatted = results[0]['formatted_address'] as String;
+
+          setState(() {
+            _currentCenter = LatLng(lat, lng);
+            _selectedAddress = formatted;
+            _searchCtrl.text = formatted;
+          });
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _mapController?.moveCamera(
+              CameraUpdate.newLatLngZoom(_currentCenter, 15),
+            );
+          });
+        } else {
+          _showErrorSnackBar();
+        }
+      } else {
+        _showErrorSnackBar();
+      }
+    } catch (_) {
+      _showErrorSnackBar();
+    }
+  }
+
+  void _showErrorSnackBar() {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Address not found'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _clearSearch() {
@@ -181,12 +242,13 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   Future<void> _reverseGeocode(LatLng pos) async {
     if (_isGeocoding) return;
     setState(() => _isGeocoding = true);
+    
+    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
+    final url = Uri.parse(
+      '$baseUrl/api/places/geocode'
+      '?latlng=${pos.latitude},${pos.longitude}',
+    );
     try {
-      final url = Uri.parse(
-        'https://maps.googleapis.com/maps/api/geocode/json'
-        '?latlng=${pos.latitude},${pos.longitude}'
-        '&key=$_apiKey',
-      );
       final resp = await http.get(url);
       if (!mounted) return;
       if (resp.statusCode == 200) {
@@ -213,37 +275,28 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               ? '$area, $city'
               : city ??
                   (results[0]['formatted_address'] as String? ??
-                      _nearestSector(pos));
+                      'Location not found');
           setState(() => _selectedAddress = address);
+        } else {
+          setState(() => _selectedAddress = 'Location not found');
         }
+      } else {
+        setState(() => _selectedAddress = 'Location not found');
       }
     } catch (_) {
-      // Fallback to Islamabad sector names if API fails
-      if (mounted) setState(() => _selectedAddress = _nearestSector(pos));
+      if (mounted) setState(() => _selectedAddress = 'Location not found');
     } finally {
       if (mounted) setState(() => _isGeocoding = false);
     }
   }
 
-  String _nearestSector(LatLng pos) {
-    String nearest = 'Islamabad';
-    double minDist = double.infinity;
-    for (final entry in _sectorCoords.entries) {
-      final dlat = pos.latitude - entry.value.latitude;
-      final dlng = pos.longitude - entry.value.longitude;
-      final dist = dlat * dlat + dlng * dlng;
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = entry.key;
-      }
-    }
-    return '$nearest, Islamabad';
-  }
-
-  void _goToMyLocation() {
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(_islamabadCenter, 14),
-    );
+  Future<void> _goToMyLocation() async {
+    final loc = await getUserWebLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapController?.moveCamera(
+        CameraUpdate.newLatLngZoom(loc ?? _islamabadCenter, 14),
+      );
+    });
   }
 
   void _confirmLocation() => Navigator.pop(context, _selectedAddress);
@@ -266,7 +319,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               target: _islamabadCenter,
               zoom: 13,
             ),
-            onMapCreated: (c) => _mapController = c,
+            onMapCreated: (c) {
+              _mapController = c;
+              if (_currentCenter != _islamabadCenter) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  c.moveCamera(CameraUpdate.newLatLngZoom(_currentCenter, 14));
+                });
+              }
+            },
             onCameraMove: _onCameraMove,
             onCameraIdle: _onCameraIdle,
             markers: _markers,
@@ -326,6 +386,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                   child: TextField(
                     controller: _searchCtrl,
                     onChanged: _onSearchChanged,
+                    onSubmitted: (value) => _searchAndGo(value),
                     textInputAction: TextInputAction.search,
                     style: const TextStyle(fontSize: 14),
                     decoration: InputDecoration(
@@ -338,13 +399,22 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                         color: AppTheme.primary,
                         size: 20,
                       ),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_searchCtrl.text.isNotEmpty)
+                            IconButton(
                               icon: const Icon(Icons.close, size: 18),
                               color: AppTheme.textGrey,
                               onPressed: _clearSearch,
-                            )
-                          : null,
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.search, size: 20),
+                            color: AppTheme.primary,
+                            onPressed: () => _searchAndGo(_searchCtrl.text),
+                          ),
+                        ],
+                      ),
                       border: InputBorder.none,
                       contentPadding:
                           const EdgeInsets.symmetric(vertical: 14),

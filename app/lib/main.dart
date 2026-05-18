@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'firebase_options.dart';
@@ -32,6 +33,7 @@ class KhidmatBotApp extends StatelessWidget {
     return MaterialApp(
       title: 'KhidmatBot',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: AppScrollBehavior(),
       theme: AppTheme.theme,
       navigatorKey: navigatorKey,
       home: const HomeScreen(),
@@ -59,4 +61,12 @@ class KhidmatBotApp extends StatelessWidget {
       },
     );
   }
+}
+
+class AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+      };
 }

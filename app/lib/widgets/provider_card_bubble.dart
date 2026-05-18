@@ -11,10 +11,12 @@ class ProviderCardBubble extends StatefulWidget {
   final ProviderModel provider;
   final VoidCallback? onShowAlternative;
   final String? requestedDatetime; // ISO datetime to check day availability
+  final void Function(PricingModel pricing, String contractId) onContractCreated;
 
   const ProviderCardBubble({
     super.key,
     required this.provider,
+    required this.onContractCreated,
     this.onShowAlternative,
     this.requestedDatetime,
   });
@@ -51,7 +53,10 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProviderProfileScreen(provider: widget.provider),
+        builder: (_) => ProviderProfileScreen(
+          provider: widget.provider,
+          onContractCreated: widget.onContractCreated,
+        ),
       ),
     );
   }
@@ -74,15 +79,26 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
       };
       
       final providerJson = widget.provider.toJson();
-      final pricingJson = await ApiService.getPricing(providerJson, mockIntent, false);
+      final pricingJson = await ApiService.getPricing(
+        providerJson, 
+        mockIntent, 
+        false, 
+        userId: ApiService.sessionId,
+      );
       final pricingModel = PricingModel.fromJson(pricingJson);
+      final contractId = pricingJson['contract_id'] as String? ?? '';
 
       if (mounted) {
         setState(() => _isLoadingPricing = false);
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => PricingScreen(provider: widget.provider, pricing: pricingModel),
+            builder: (_) => PricingScreen(
+              provider: widget.provider,
+              pricing: pricingModel,
+              contractId: contractId,
+              onContractCreated: widget.onContractCreated,
+            ),
           ),
         );
       }

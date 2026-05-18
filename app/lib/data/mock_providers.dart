@@ -31,6 +31,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': ['09:00', '15:00'], 'thursday': [],
       'friday': ['14:00'], 'saturday': ['10:00', '16:00'], 'sunday': [],
     },
+    coordinates: const {'lat': 33.7215, 'lng': 73.0433},
     recentReviews: [
       Review(reviewer: 'Kamran B.', text: 'Bahut acha kaam kiya. AC bilkul theek ho gaya. Time par aaya.', rating: 5.0, sentiment: 'positive', date: '2 din pehle'),
       Review(reviewer: 'Sara A.', text: 'Professional behavior. Sab kuch explain kiya. Recommend karunga.', rating: 5.0, sentiment: 'positive', date: '1 hafte pehle'),
@@ -67,6 +68,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': ['11:00'], 'thursday': ['09:00', '15:00'],
       'friday': [], 'saturday': ['12:00'], 'sunday': ['10:00'],
     },
+    coordinates: const {'lat': 33.6844, 'lng': 73.0479},
     recentReviews: [
       Review(reviewer: 'Ahmed R.', text: 'Kaam acha hai. Wiring properly ki.', rating: 4.0, sentiment: 'positive', date: '3 din pehle'),
       Review(reviewer: 'Nadia S.', text: 'Thoda late aaya lekin kaam theek tha.', rating: 4.0, sentiment: 'positive', date: '10 din pehle'),
@@ -103,6 +105,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': ['10:00'], 'thursday': [],
       'friday': ['11:00'], 'saturday': [], 'sunday': ['09:00'],
     },
+    coordinates: const {'lat': 33.7121, 'lng': 72.9754},
     recentReviews: [
       Review(reviewer: 'Zara M.', text: 'Leakage fix kar di. Bahut clean kaam. Highly recommend!', rating: 5.0, sentiment: 'positive', date: '1 din pehle'),
       Review(reviewer: 'Hassan T.', text: 'Time par aaya, kaam ache se kiya.', rating: 5.0, sentiment: 'positive', date: '5 din pehle'),
@@ -139,6 +142,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': [], 'thursday': ['14:00'],
       'friday': [], 'saturday': ['16:00'], 'sunday': [],
     },
+    coordinates: const {'lat': 33.7273, 'lng': 72.9902},
     recentReviews: [
       Review(reviewer: 'Asma B.', text: 'Door bilkul theek fit ki. Kaam clean tha.', rating: 5.0, sentiment: 'positive', date: '4 din pehle'),
       Review(reviewer: 'Raza K.', text: 'Professional, recommend karunga.', rating: 4.0, sentiment: 'positive', date: '1 hafte pehle'),
@@ -176,6 +180,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': ['16:00', '17:00'], 'thursday': ['16:00', '17:00'],
       'friday': ['16:00'], 'saturday': [], 'sunday': [],
     },
+    coordinates: const {'lat': 33.6738, 'lng': 73.0781},
     recentReviews: [
       Review(reviewer: 'Rashid A.', text: 'Meri beti ka math bahut improve hua. Outstanding teacher!', rating: 5.0, sentiment: 'positive', date: '2 din pehle'),
       Review(reviewer: 'Nadia H.', text: 'Bohot patient aur samjhane wali hain. Highly recommend.', rating: 5.0, sentiment: 'positive', date: '1 hafte pehle'),
@@ -212,6 +217,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': ['13:00'], 'thursday': [],
       'friday': ['09:00'], 'saturday': [], 'sunday': ['15:00'],
     },
+    coordinates: const {'lat': 33.6844, 'lng': 73.0479},
     recentReviews: [
       Review(reviewer: 'Fahad B.', text: 'Theek kaam, time par aaya.', rating: 4.0, sentiment: 'positive', date: '6 din pehle'),
       Review(reviewer: 'Maryam R.', text: 'Leak fix ho gaya, satisfied hoon.', rating: 4.0, sentiment: 'positive', date: '2 hafte pehle'),
@@ -248,6 +254,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': ['11:00'], 'thursday': ['12:00'],
       'friday': ['14:00'], 'saturday': ['09:00', '15:00'], 'sunday': [],
     },
+    coordinates: const {'lat': 33.7121, 'lng': 72.9754},
     recentReviews: [
       Review(reviewer: 'Sajid A.', text: 'Kaam theek tha, lekin unprofessional behavior.', rating: 3.0, sentiment: 'negative', date: '1 hafte pehle'),
       Review(reviewer: 'Hina M.', text: 'Acceptable, lekin dobara nahi bulaunga.', rating: 3.0, sentiment: 'negative', date: '2 hafte pehle'),
@@ -284,6 +291,7 @@ final List<ProviderModel> mockProviders = [
       'wednesday': [], 'thursday': ['10:00'],
       'friday': [], 'saturday': ['11:00'], 'sunday': [],
     },
+    coordinates: const {'lat': 33.7215, 'lng': 73.0433},
     recentReviews: [
       Review(reviewer: 'Amna T.', text: 'AC theek nahi hua, dobara ana para.', rating: 2.0, sentiment: 'negative', date: '3 din pehle'),
       Review(reviewer: 'Umar S.', text: 'Late aaya aur kaam adhoora chora.', rating: 2.0, sentiment: 'negative', date: '1 hafte pehle'),

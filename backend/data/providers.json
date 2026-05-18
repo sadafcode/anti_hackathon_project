@@ -1449,5 +1449,119 @@
     "strikes": 0,
     "is_mock": false,
     "user_preference_score": 0
+  },
+  {
+    "id": "PRV-RDG11MJX",
+    "name": "hammad",
+    "area": "Nazimabad",
+    "service_types": [
+      "tutor"
+    ],
+    "hourly_rate": 250,
+    "experience_years": 8,
+    "blue_tick": false,
+    "rating": 0,
+    "total_reviews": 0,
+    "review_sentiment": "unrated",
+    "on_time_score": 100,
+    "cancellation_rate": 0,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "strikes": 0,
+    "user_preference_score": 0,
+    "registered_at": "2026-05-18T10:07:53.635Z",
+    "availability": {
+      "monday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "tuesday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "wednesday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "thursday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "friday": [
+        "09:00",
+        "11:00",
+        "14:00"
+      ],
+      "saturday": [
+        "10:00",
+        "12:00"
+      ],
+      "sunday": []
+    }
+  },
+  {
+    "id": "PRV-G283Q64D",
+    "name": "samandar khan",
+    "area": "Federal B Area",
+    "service_types": [
+      "plumber"
+    ],
+    "hourly_rate": 300,
+    "experience_years": 10,
+    "blue_tick": false,
+    "rating": 0,
+    "total_reviews": 0,
+    "review_sentiment": "unrated",
+    "on_time_score": 100,
+    "cancellation_rate": 0,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "strikes": 0,
+    "user_preference_score": 0,
+    "registered_at": "2026-05-18T10:23:04.960Z",
+    "availability": {
+      "monday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "tuesday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "wednesday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "thursday": [
+        "09:00",
+        "11:00",
+        "14:00",
+        "16:00"
+      ],
+      "friday": [
+        "09:00",
+        "11:00",
+        "14:00"
+      ],
+      "saturday": [
+        "10:00",
+        "12:00"
+      ],
+      "sunday": []
+    }
   }
 ]

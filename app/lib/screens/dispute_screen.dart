@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 import '../services/api_service.dart';
 
 class DisputeScreen extends StatefulWidget {
-  final ProviderModel provider;
+  final ProviderModel? provider;
+  final String? bookingId;
+  final String? providerId;
 
-  const DisputeScreen({super.key, required this.provider});
+  const DisputeScreen({
+    super.key,
+    this.provider,
+    this.bookingId,
+    this.providerId,
+  });
 
   @override
   State<DisputeScreen> createState() => _DisputeScreenState();
@@ -17,6 +25,7 @@ class _DisputeScreenState extends State<DisputeScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedIssue;
   final TextEditingController _descController = TextEditingController();
+  final TextEditingController _bookingIdController = TextEditingController();
   bool _submitted = false;
 
   late AnimationController _successController;
@@ -78,6 +87,7 @@ class _DisputeScreenState extends State<DisputeScreen>
   @override
   void dispose() {
     _descController.dispose();
+    _bookingIdController.dispose();
     _successController.dispose();
     super.dispose();
   }
@@ -115,8 +125,61 @@ class _DisputeScreenState extends State<DisputeScreen>
     );
     
     try {
+      final enteredBookingId = _bookingIdController.text.trim();
+      String? finalBookingId = widget.bookingId;
+      String? finalProviderId = widget.providerId;
+      Map<String, dynamic>? finalProviderData;
+      String? resolvedService;
+      String? resolvedCustomer;
+
+      if (finalBookingId == null && enteredBookingId.isNotEmpty) {
+        final doc = await FirebaseFirestore.instance
+            .collection('bookings')
+            .doc(enteredBookingId)
+            .get();
+
+        if (!doc.exists) {
+          if (mounted) {
+            Navigator.pop(context); // Close loader
+            setState(() => _isSubmitting = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Yeh Booking ID nahi mili, check karein'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+
+        final data = doc.data();
+        if (data != null) {
+          finalBookingId = enteredBookingId;
+          finalProviderId = data['provider_id'] as String?;
+          resolvedService = data['service'] as String?;
+          resolvedCustomer = data['user_id'] as String?;
+
+          if (finalProviderId != null) {
+            final pDoc = await FirebaseFirestore.instance
+                .collection('providers')
+                .doc(finalProviderId)
+                .get();
+            if (pDoc.exists) {
+              finalProviderData = pDoc.data();
+            }
+          }
+        }
+      }
+
+      final providerObj = widget.provider?.toJson() ?? finalProviderData;
       final req = {
-        'provider': widget.provider.toJson(),
+        'booking_id': finalBookingId,
+        'provider_id': finalProviderId,
+        'user_id': resolvedCustomer ?? ApiService.sessionId,
+        'issue_type': _selectedIssue,
+        'description': _descController.text,
+        'service': resolvedService,
+        'provider': providerObj,
         'dispute_type': _selectedIssue == 'quality' ? 'quality_complaint' : 
                         _selectedIssue == 'price' ? 'price_disagreement' : 
                         _selectedIssue,
@@ -162,10 +225,16 @@ class _DisputeScreenState extends State<DisputeScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildProviderCard(),
-          const SizedBox(height: 16),
-          _buildWarningBanner(),
-          const SizedBox(height: 14),
+          if (widget.provider != null) ...[
+            _buildProviderCard(),
+            const SizedBox(height: 16),
+            _buildWarningBanner(),
+            const SizedBox(height: 14),
+          ],
+          if (widget.bookingId == null) ...[
+            _buildBookingIdField(),
+            const SizedBox(height: 14),
+          ],
           _buildIssueSelector(),
           const SizedBox(height: 14),
           if (_selected != null) _buildResolutionHint(),
@@ -181,8 +250,65 @@ class _DisputeScreenState extends State<DisputeScreen>
     );
   }
 
+  Widget _buildBookingIdField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Booking ID daalein',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _bookingIdController,
+            decoration: InputDecoration(
+              hintText: 'e.g. BK-A1B2C3D4',
+              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Booking ID receipt ya confirmation screen par milti hai',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProviderCard() {
-    final p = widget.provider;
+    if (widget.provider == null) return const SizedBox.shrink();
+    final p = widget.provider!;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(

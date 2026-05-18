@@ -41,6 +41,7 @@ class ProviderModel {
   final String? photoUrl;
   final String gender;
   final Map<String, List<String>> availability;
+  final Map<String, dynamic> coordinates;
 
   const ProviderModel({
     required this.id,
@@ -66,6 +67,7 @@ class ProviderModel {
     required this.rankReason,
     required this.recentReviews,
     required this.colorIndex,
+    required this.coordinates,
     this.photoUrl,
     this.gender = 'male',
     this.availability = const {},
@@ -96,6 +98,7 @@ class ProviderModel {
       rankReason: json['ranking_reason'] ?? '',
       recentReviews: [],
       colorIndex: 0,
+      coordinates: json['coordinates'] ?? {'lat': 33.7215, 'lng': 73.0433},
     );
   }
 
@@ -118,6 +121,7 @@ class ProviderModel {
       'strikes': strikes,
       'calculated_score': rankScore,
       'ranking_reason': rankReason,
+      'coordinates': coordinates,
     };
   }
 

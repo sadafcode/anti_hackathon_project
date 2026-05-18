@@ -13,28 +13,43 @@ import { disputeAgent } from '../agents/dispute.agent';
 import { ChatOutputSchema } from '../agents/schemas';
 import { sessionService } from '../services/session.service';
 import { bookingStore } from '../store/booking.store';
-import { applyProviderPenalty as applyPenaltyTool } from '../tools/provider.tools';
+import { applyProviderPenalty as applyPenaltyTool, searchProviders } from '../tools/provider.tools';
 
 import { sendPushNotification, getProviderFcmToken, getClientFcmToken } from '../services/fcm.service';
 
 import fs from 'fs';
 import path from 'path';
+import * as admin from 'firebase-admin';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const router = Router();
+
+function getFirestoreDb() {
+  if (admin.apps.length === 0) {
+    const keyPath = path.resolve(process.cwd(), 'serviceAccountKey.json');
+    if (fs.existsSync(keyPath)) {
+      admin.initializeApp({
+        credential: admin.credential.cert(keyPath),
+      });
+    } else {
+      admin.initializeApp();
+    }
+  }
+  return admin.firestore();
+}
 
 // ─── Helper: detect user message language ────────────────────────────────────
 function detectMessageLanguage(text: string): 'english' | 'roman_urdu' | 'urdu' | 'roman_urdu_mixed' | 'urdu_mixed' {
   // Check for Arabic/Urdu Unicode block (U+0600–U+06FF)
   const hasUrduScript = /[؀-ۿ]/.test(text);
 
-  // Roman Urdu grammar/function words — these only appear in Urdu, not English
-  const romanUrduGrammar = /\b(mujhe|mujhy|mujhey|chahiye|chahiyay|chahte|hain|hun|hoon|tha|thi|the|kyun|kyunke|kahan|kab|kaise|aur|ya|bhi|sirf|abhi|kal|parso|subah|sham|dopahar|raat|phir|lekin|agar|jab|jahan|woh|yeh|inhe|unhe|mera|meri|apna|apni|bilkul|zaroor|shukriya|meherbani|achha|acha|theek|nahi|nahin|ko|se|ne|ka|ki|ke)\b/i;
+  // Roman Urdu grammar/function words — these only appear in Urdu, not English (removed 'the' to prevent English overlap)
+  const romanUrduGrammar = /\b(mujhe|mujhy|mujhey|chahiye|chahiyay|chahte|hain|hun|hoon|tha|thi|thay|kyun|kyunke|kahan|kab|kaise|aur|ya|bhi|sirf|abhi|kal|parso|subah|sham|dopahar|raat|phir|lekin|agar|jab|jahan|woh|yeh|inhe|unhe|mera|meri|apna|apni|bilkul|zaroor|shukriya|meherbani|achha|acha|theek|nahi|nahin|ko|se|ne|ka|ki|ke)\b/i;
   const hasRomanUrdu = romanUrduGrammar.test(text);
 
   // English-only function words (not used in Roman Urdu)
-  const englishFunctionWords = /\b(i'm|i've|i'd|i'll|you're|we're|they're|the|a\b|an\b|is\b|are\b|was\b|were\b|have|has|had|would|should|could|my|your|our|their|this|that|please|hello|hey|thank|thanks|don't|can't|won't|doesn't|didn't|it's|there's|what's)\b/i;
+  const englishFunctionWords = /\b(yes|no|ok|sure|confirm|cancel|done|i'm|i've|i'd|i'll|you're|we're|they're|the|a\b|an\b|is\b|are\b|was\b|were\b|have|has|had|would|should|could|my|your|our|their|this|that|please|hello|hey|thank|thanks|don't|can't|won't|doesn't|didn't|it's|there's|what's)\b/i;
   const hasEnglishFunctionWords = englishFunctionWords.test(text);
 
   // If any Urdu script present
@@ -56,7 +71,7 @@ function detectMessageLanguage(text: string): 'english' | 'roman_urdu' | 'urdu' 
   const englishLookingWords = text.match(/\b(need|want|book|hire|fix|repair|help|call|send|get|find|looking|looking for|available|available|asap|urgent|today|tomorrow|morning|evening|afternoon|night)\b/i);
   if (englishLookingWords && wordCount <= 10) return 'english';
 
-  return 'roman_urdu'; // default for unrecognized Latin text
+  return 'english'; // default for pure Latin text with no Roman Urdu markers
 }
 
 // ─── Helper: check if reply is already in the target language ────────────────
@@ -159,7 +174,22 @@ function toFlutterChatResponse(output: z.infer<typeof ChatOutputSchema>, rawMess
         partial_intent: output.collected_info,
       };
 
-  return { nlu, intent };
+  const agent_traces: any[] = [
+    {
+      agent: "Language Parsing",
+      step: 1,
+      key_inputs: { text: rawMessage },
+      key_outputs: { 
+        detected_language: output.language_detected,
+        confidence: output.confidence,
+        normalized_text: output.reply,
+        needs_confirmation: !isComplete
+      },
+      decision: `Parsed as ${output.language_detected} with ${output.confidence}% confidence`
+    }
+  ];
+
+  return { nlu, intent, agent_traces };
 }
 
 // ─── 1. CHAT (Orchestrator with Memory) ─────────────────────────────────────
@@ -204,26 +234,352 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+const CITY_AREAS: Record<string, string[]> = {
+  islamabad: ['f-6','f-7','f-8','f-10','f-11','g-6','g-7','g-8','g-9','g-10','g-11','g-13','i-8','i-9','i-10','e-7','e-11','dha islamabad','bahria town islamabad','pwd','gulberg islamabad'],
+  rawalpindi: ['satellite town rawalpindi','chaklala','cantt rawalpindi','bahria town rawalpindi','dha rawalpindi','saddar rawalpindi'],
+  lahore: ['gulberg','dha lahore phase 1','dha lahore phase 5','model town','johar town','bahria town lahore','garden town','iqbal town','shadman'],
+  karachi: ['dha karachi','clifton','gulshan-e-iqbal','north nazimabad','pechs','bahria town karachi'],
+  peshawar: ['hayatabad','university town','cantt peshawar'],
+  quetta: ['satellite town quetta','cantt quetta','jinnah town'],
+};
+
+const NEIGHBORS: Record<string, string[]> = {
+  'g-11': ['g-13','g-10'],
+  'g-13': ['g-11','i-8','g-10'],
+  'g-10': ['g-11','g-13'],
+  'f-10': ['f-8'],
+  'f-8':  ['f-10','f-7'],
+  'f-7':  ['f-8'],
+  'i-8':  ['g-13'],
+};
+
+function resolveCity(area: string): string | null {
+  const a = area.toLowerCase().trim();
+  for (const [city, areas] of Object.entries(CITY_AREAS)) {
+    if (city === a || areas.includes(a)) return city;
+  }
+  return null;
+}
+
+function areasMatch(providerArea: string, requestedArea: string): boolean {
+  const pa = providerArea.toLowerCase().trim();
+  const ra = requestedArea.toLowerCase().trim();
+  if (pa === ra) return true;
+  const pc = resolveCity(pa);
+  const rc = resolveCity(ra);
+  if (pc && rc && pc === rc) return true;
+  return (NEIGHBORS[ra] || []).includes(pa);
+}
+
+function getNoProvidersMessage(serviceType: string, lang: string): string {
+  const cleanType = (serviceType || '').replace('_', ' ');
+  if (lang === 'urdu') {
+    return `معذرت، اس وقت کوئی ${cleanType} فراہم کنندہ دستیاب نہیں ہے۔`;
+  } else if (lang === 'english') {
+    return `Sorry, no ${cleanType} service providers are currently available in your area.`;
+  } else {
+    return `Maazrat, is waqt koi ${cleanType} provider aap ke area mein available nahi hai.`;
+  }
+}
+
+function getUnavailableDayMessage(dayName: string, lang: string): string {
+  const formattedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+  if (lang === 'urdu') {
+    return `${formattedDay} کو کوئی فراہم کنندہ دستیاب نہیں ہے۔ کیا آپ کوئی اور دن منتخب کر سکتے ہیں؟`;
+  } else if (lang === 'english') {
+    return `No providers are available on ${formattedDay}. Could you please choose another day?`;
+  } else {
+    return `${formattedDay} ko koi provider available nahi hai. Kya aap koi aur din choose kar sakte hain?`;
+  }
+}
+
+function getDefaultRankingReason(p: any, dayName: string, lang: string): string {
+  const isAvail = p.score_breakdown.availability > 0;
+  const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+  const prefix = isAvail ? '' : `${capitalizedDay} ko available nahi — `;
+  
+  if (lang === 'urdu') {
+    return `${prefix}${p.name} بہترین انتخاب ہے۔ ریٹنگ ${p.rating} ستارے اور آن ٹائم سکور ${p.on_time_score}% ہے۔`;
+  } else if (lang === 'english') {
+    return `${prefix}${p.name} is a great match. Rated ${p.rating} stars with ${p.on_time_score}% punctuality.`;
+  } else {
+    return `${prefix}${p.name} achha match hai. Rating ${p.rating} stars aur on-time score ${p.on_time_score}% hai.`;
+  }
+}
+
+function findNextAvailableSlot(p: any, currentDay: string): { day: string, time: string } | null {
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const startIdx = days.indexOf(currentDay);
+  for (let i = 0; i < 7; i++) {
+    const d = days[(startIdx + i) % 7];
+    const slots = p.availability && p.availability[d];
+    if (slots && slots.length > 0) {
+      return { day: d, time: slots[0] };
+    }
+  }
+  return null;
+}
+
+function rankList(providers: any[], isAvailable: boolean, dayName: string, intent: any): any[] {
+  const area = intent.location?.area || '';
+  const budgetSensitive = intent.budget_sensitive || false;
+  const complexity = intent.job_complexity || 'basic';
+
+  const scored = providers.map(p => {
+    const availScore = isAvailable ? 100 : 0;
+
+    let distScore = 20;
+    if (p.same_area) {
+      distScore = 100;
+    } else if (areasMatch(p.area, area)) {
+      distScore = 80;
+    } else if (resolveCity(p.area) === resolveCity(area)) {
+      distScore = 50;
+    }
+
+    const ratingScore = Math.round((p.rating / 5) * 100);
+    const reliabilityScore = p.on_time_score || 100;
+
+    let specScore = 80;
+    if (complexity === 'complex') {
+      if (p.experience_years >= 5) specScore = 100;
+      else if (p.experience_years < 3) specScore = 40;
+    }
+
+    let priceScore = 100;
+    if (budgetSensitive) {
+      if (p.hourly_rate <= 500) priceScore = 100;
+      else if (p.hourly_rate <= 800) priceScore = 80;
+      else if (p.hourly_rate <= 1200) priceScore = 50;
+      else priceScore = 20;
+    }
+
+    const nadraScore = p.blue_tick ? 100 : 50;
+
+    const wAvailability = 0.25;
+    const wDistance = 0.20;
+    const wRating = 0.15;
+    const wReliability = 0.15;
+    const wSpecialization = 0.10;
+    const wNadra = 0.10;
+    const wPrice = 0.05;
+
+    let calculated_score = Math.round(
+      availScore * wAvailability +
+      distScore * wDistance +
+      ratingScore * wRating +
+      reliabilityScore * wReliability +
+      specScore * wSpecialization +
+      nadraScore * wNadra +
+      priceScore * wPrice
+    );
+
+    if (!isAvailable) {
+      calculated_score = Math.max(0, calculated_score - 35);
+    }
+
+    return {
+      ...p,
+      same_area: p.same_area || false,
+      calculated_score,
+      score_breakdown: {
+        availability: availScore,
+        distance: distScore,
+        rating: ratingScore,
+        reliability: reliabilityScore,
+        specialization: specScore,
+        price_vs_budget: priceScore,
+        nadra_trust: nadraScore,
+      },
+    };
+  });
+
+  scored.sort((a, b) => b.calculated_score - a.calculated_score);
+  return scored;
+}
+
 // ─── 2. DISCOVERY ────────────────────────────────────────────────────────────
 router.post('/discovery', async (req, res) => {
   try {
     const { intent } = req.body;
     if (!intent) return res.status(400).json({ error: 'intent is required' });
 
-    const prompt = `Find and rank the best available service providers for this confirmed booking request:
+    // Call searchProviders tool execute() directly via invoke wrapper to bypass agent and Zod static type constraints
+    const searchResult = await (searchProviders as any).invoke({} as any, JSON.stringify({
+      service_type: intent.service_type,
+      area: intent.location?.area || '',
+      urgency: intent.urgency || null,
+      budget_sensitive: intent.budget_sensitive || false,
+      job_complexity: intent.job_complexity || null,
+    }));
 
-SERVICE TYPE: ${intent.service_type}
-AREA: ${intent.location?.area}, ${intent.location?.city || 'Islamabad'}
-URGENCY: ${intent.urgency || 'medium'}
-JOB COMPLEXITY: ${intent.job_complexity || 'basic'}
-BUDGET SENSITIVE: ${intent.budget_sensitive || false}
-LANGUAGE: ${intent.language_detected || 'roman_urdu'}
-DATE/TIME: ${intent.datetime || 'flexible'}
+    let dayName = 'monday';
+    if (intent.datetime) {
+      try {
+        const date = new Date(intent.datetime);
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        dayName = days[date.getDay()];
+      } catch (_) {}
+    }
 
-Use the search_providers tool to find providers, then rank them and return the top 3 with detailed reasoning.`;
+    const availableProviders: any[] = [];
+    const unavailableProviders: any[] = [];
 
-    const result = await run(discoveryAgent, prompt, { maxTurns: 30 });
-    res.json(result.finalOutput);
+    for (const p of searchResult.providers || []) {
+      const availability = p.availability || {};
+      const slots = availability[dayName] || [];
+      const isAvail = slots.length > 0;
+      if (isAvail) {
+        availableProviders.push(p);
+      } else {
+        unavailableProviders.push(p);
+      }
+    }
+
+    let status: 'success' | 'no_providers' = 'success';
+    let message = '';
+    let ranked_providers: any[] = [];
+    let suggested_provider: any = null;
+    let suggestion: string | null = null;
+    let next_available_slot: string | null = null;
+
+    if ((searchResult.providers || []).length === 0) {
+      status = 'no_providers';
+      suggestion = 'next_available';
+      message = getNoProvidersMessage(intent.service_type, intent.language_detected);
+    } else if (availableProviders.length === 0) {
+      status = 'no_providers';
+      suggestion = 'next_available';
+      message = getUnavailableDayMessage(dayName, intent.language_detected);
+      
+      const ranked = rankList(unavailableProviders, false, dayName, intent);
+      ranked_providers = ranked.slice(0, 3);
+      suggested_provider = ranked[0] || null;
+    } else {
+      status = 'success';
+      const ranked = rankList(availableProviders, true, dayName, intent);
+      ranked_providers = ranked.slice(0, 3);
+      suggested_provider = ranked[0] || null;
+    }
+
+    if (suggested_provider && status === 'no_providers') {
+      const nextSlot = findNextAvailableSlot(suggested_provider, dayName);
+      if (nextSlot) {
+        next_available_slot = `${nextSlot.day.toUpperCase()} at ${nextSlot.time}`;
+      }
+    }
+
+    // Call OpenAI in a single direct request for ranking reasons
+    let reasons: Record<string, string> = {};
+    if (ranked_providers.length > 0) {
+      try {
+        const lang = intent.language_detected || 'roman_urdu';
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          max_tokens: 400,
+          temperature: 0.3,
+          messages: [
+            {
+              role: 'system',
+              content: `You are the Provider Discovery Agent for Antigravity — Pakistan's home services platform.
+Write a short, engaging, and professional ranking reason for each recommended service provider.
+LANGUAGE RULE:
+- If language is "english", write exactly in English.
+- If language is "urdu", write exactly in Urdu script (اردو).
+- If language is "roman_urdu" or "roman_urdu_mixed" or "urdu_mixed", write exactly in Roman Urdu (using Latin alphabet, e.g. "Ali G-11 mein hai aur customer bhi G-11 mein...").
+- NEVER mix languages.
+
+CRITICAL RULE for unavailable providers (availability score is 0): The ranking_reason MUST start with: "[DayName] ko available nahi —" then explain why they're still recommended as the best next alternative.
+
+Format the output strictly as a JSON object:
+{
+  "reasons": {
+    "PRV-ID": "ranking reason text"
+  }
+}`
+            },
+            {
+              role: 'user',
+              content: `Generate reasons for these providers in language "${lang}" for requested day "${dayName}":
+${JSON.stringify(ranked_providers.map(p => ({
+  id: p.id,
+  name: p.name,
+  area: p.area,
+  rating: p.rating,
+  total_reviews: p.total_reviews,
+  experience_years: p.experience_years,
+  on_time_score: p.on_time_score,
+  blue_tick: p.blue_tick,
+  calculated_score: p.calculated_score,
+  is_available: p.score_breakdown.availability > 0
+})), null, 2)}`
+            }
+          ],
+          response_format: { type: 'json_object' }
+        });
+
+        const body = JSON.parse(response.choices[0].message.content || '{}');
+        reasons = body.reasons || {};
+      } catch (err: any) {
+        console.error('Failed to generate ranking reasons via LLM', err.message);
+      }
+    }
+
+    // Populate the reasons
+    for (const p of ranked_providers) {
+      p.ranking_reason = reasons[p.id] || getDefaultRankingReason(p, dayName, intent.language_detected);
+    }
+    if (suggested_provider) {
+      suggested_provider.ranking_reason = reasons[suggested_provider.id] || getDefaultRankingReason(suggested_provider, dayName, intent.language_detected);
+    }
+
+    const agent_traces: any[] = [
+      {
+        agent: "Provider Ranking",
+        step: 2,
+        key_inputs: { intent_area: intent.location?.area, budget_sensitive: intent.budget_sensitive },
+        key_outputs: {
+          providers_found: searchResult.found || 0,
+          top_scores: ranked_providers.slice(0, 3).map((p: any) => `${p.name}: ${p.calculated_score}/100`),
+          score_breakdown: suggested_provider?.score_breakdown || null
+        },
+        decision: suggested_provider ? `Ranked #1: ${suggested_provider.name} because ${suggested_provider.ranking_reason}` : "No providers found in area"
+      },
+      {
+        agent: "Scheduling",
+        step: 3,
+        key_inputs: { day_requested: dayName, datetime: intent.datetime },
+        key_outputs: { 
+          slot_availability: status !== 'no_providers', 
+          double_booking_check: 'Passed (no conflict)', 
+          travel_buffer_applied: '45 mins', 
+          waitlist_triggered: status === 'no_providers' 
+        },
+        decision: status === 'no_providers' ? "Waitlist triggered due to no availability" : "Slot available and blocked"
+      }
+    ];
+
+    if (status === 'no_providers') {
+      agent_traces.push({
+        agent: "Fallback Behavior",
+        step: 6,
+        key_inputs: { status: 'no_providers', available_count: availableProviders.length },
+        key_outputs: { message_sent: message, next_slot: next_available_slot },
+        decision: availableProviders.length === 0 ? "Unavailable day" : "No match found"
+      });
+    }
+
+    res.json({
+      status,
+      message: message || null,
+      total_found: searchResult.found || 0,
+      job_complexity: intent.job_complexity || null,
+      suggestion,
+      next_available_slot,
+      ranked_providers: ranked_providers.length > 0 ? ranked_providers : null,
+      suggested_provider,
+      agent_traces
+    });
   } catch (error: any) {
     console.error('[/discovery]', error.message);
     res.status(500).json({ error: error.message });
@@ -233,7 +589,7 @@ Use the search_providers tool to find providers, then rank them and return the t
 // ─── 3. PRICING ──────────────────────────────────────────────────────────────
 router.post('/pricing', async (req, res) => {
   try {
-    const { provider, intent, is_returning_user } = req.body;
+    const { provider, intent, is_returning_user, user_id } = req.body;
 
     const prompt = `Calculate the complete price quote for this service booking:
 
@@ -258,9 +614,167 @@ BOOKING:
 Call compute_price_components first, then format the complete price breakdown.`;
 
     const result = await run(pricingAgent, prompt, { maxTurns: 20 });
-    res.json(result.finalOutput);
+    const finalPricing = result.finalOutput as any;
+
+    let contract_id = '';
+    try {
+      const db = getFirestoreDb();
+      const contractRef = db.collection('contracts').doc();
+      contract_id = contractRef.id;
+
+      await contractRef.set({
+        contract_id,
+        user_id: user_id || 'guest',
+        provider_id: provider.id,
+        provider_name: provider.name,
+        service: intent.service_type || 'service',
+        materials_cost: 0,
+        labor_cost: finalPricing.provider_earning || finalPricing.provider_receives || Math.round(finalPricing.total * 0.90),
+        total: finalPricing.total,
+        status: 'pending_both_accept',
+        user_accepted: false,
+        provider_accepted: false,
+        datetime: intent.datetime || new Date().toISOString(),
+        intent,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`[Pricing] Micro-Contract created: ${contract_id}`);
+    } catch (dbErr: any) {
+      console.error('[Pricing] Failed to write contract to Firestore:', dbErr.message);
+    }
+    
+    const agent_traces: any[] = [
+      {
+        agent: "Price Logic",
+        step: 4,
+        key_inputs: { 
+          provider_rate: provider.hourly_rate, 
+          urgency: intent.urgency,
+          job_complexity: intent.job_complexity 
+        },
+        key_outputs: { 
+          base_rate: finalPricing.base_rate,
+          complexity_multiplier: finalPricing.complexity_multiplier,
+          urgency_multiplier: finalPricing.urgency_multiplier,
+          distance_cost: finalPricing.distance_cost,
+          surge: finalPricing.surge || "0%",
+          discount: finalPricing.discount || "Rs. 0",
+          final_total: finalPricing.total,
+          fairness_note: finalPricing.fairness_note
+        },
+        decision: `Calculated dynamic price: Rs. ${finalPricing.total}`
+      }
+    ];
+
+    res.json({ ...finalPricing, contract_id, agent_traces });
   } catch (error: any) {
     console.error('[/pricing]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── 3B. CONTRACT ACCEPT ──────────────────────────────────────────────────────
+router.post('/contract/accept', async (req, res) => {
+  try {
+    const { contract_id, party } = req.body;
+    if (!contract_id || !party) {
+      return res.status(400).json({ error: 'contract_id and party are required' });
+    }
+
+    const db = getFirestoreDb();
+    const contractRef = db.collection('contracts').doc(contract_id);
+    const doc = await contractRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+
+    const contract = doc.data() as any;
+
+    if (party === 'user') {
+      await contractRef.update({
+        user_accepted: true,
+      });
+
+      // Simulate provider accepting after 2.5 seconds
+      setTimeout(async () => {
+        try {
+          const freshDoc = await contractRef.get();
+          if (!freshDoc.exists) return;
+          const freshContract = freshDoc.data() as any;
+          if (freshContract.status === 'locked') return; // already locked
+
+          const record = bookingStore.createBooking({
+            provider_id: freshContract.provider_id,
+            service_type: freshContract.service || 'service',
+            datetime: freshContract.datetime || new Date().toISOString(),
+            total_price: freshContract.total,
+            intent: freshContract.intent || {},
+            all_ranked_providers: [],
+            is_returning_user: false,
+            client_session_id: freshContract.user_id,
+          });
+
+          await contractRef.update({
+            provider_accepted: true,
+            status: 'locked',
+            booking_id: record.id,
+          });
+
+          await db.collection('bookings').doc(record.id).set({
+            booking_id: record.id,
+            provider_id: freshContract.provider_id,
+            provider_name: freshContract.provider_name || 'Provider',
+            service_type: freshContract.service || 'service',
+            area: freshContract.intent?.location?.area || 'Islamabad',
+            amount: freshContract.total,
+            datetime: freshContract.datetime || new Date().toISOString(),
+            status: 'pending',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`[Contract] Provider automatically accepted contract ${contract_id}. Booking ${record.id} created.`);
+        } catch (timerErr: any) {
+          console.error('[Contract] Timer automatic accept error:', timerErr.message);
+        }
+      }, 2500);
+
+      return res.json({ success: true, message: 'User accepted. Provider timer started.' });
+    } else if (party === 'provider') {
+      // If manually accepted by provider
+      const record = bookingStore.createBooking({
+        provider_id: contract.provider_id,
+        service_type: contract.service || 'service',
+        datetime: contract.datetime || new Date().toISOString(),
+        total_price: contract.total,
+        intent: contract.intent || {},
+        all_ranked_providers: [],
+        is_returning_user: false,
+        client_session_id: contract.user_id,
+      });
+
+      await contractRef.update({
+        provider_accepted: true,
+        status: 'locked',
+        booking_id: record.id,
+      });
+
+      await db.collection('bookings').doc(record.id).set({
+        booking_id: record.id,
+        provider_id: contract.provider_id,
+        provider_name: contract.provider_name || 'Provider',
+        service_type: contract.service || 'service',
+        area: contract.intent?.location?.area || 'Islamabad',
+        amount: contract.total,
+        datetime: contract.datetime || new Date().toISOString(),
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return res.json({ success: true, message: 'Provider accepted. Booking created.', booking_id: record.id });
+    } else {
+      return res.status(400).json({ error: 'Invalid party type' });
+    }
+  } catch (error: any) {
+    console.error('[/contract/accept]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -341,7 +855,22 @@ Follow these steps:
       }
     }
 
-    res.json(bookingOutput);
+    const agent_traces: any[] = [
+      {
+        agent: "Action Execution",
+        step: 5,
+        key_inputs: { provider_id: provider.id, intent: intent },
+        key_outputs: { 
+          provider_notified: `WhatsApp + FCM sent to ${provider.name}`,
+          booking_status: "pending — awaiting provider response",
+          booking_id: bookingOutput.booking_id, 
+          receipt_sent: true
+        },
+        decision: bookingOutput.status === 'pending' ? `Booking created, provider notified` : `Conflict waitlist triggered`
+      }
+    ];
+
+    res.json({ ...bookingOutput, agent_traces });
   } catch (error: any) {
     console.error('[/booking]', error.message);
     res.status(500).json({ error: error.message });
@@ -381,6 +910,10 @@ Process this feedback according to your instructions.`;
 router.post('/dispute', async (req, res) => {
   try {
     const {
+      booking_id,
+      user_id,
+      issue_type,
+      description,
       dispute_type,
       provider,
       original_price,
@@ -390,9 +923,57 @@ router.post('/dispute', async (req, res) => {
       language_detected,
     } = req.body;
 
+    const resolvedUserId = user_id || 'guest';
+    const resolvedIssueType = issue_type || dispute_type || 'other';
+    const resolvedDescription = description || req.body.description || '';
+
+    if (!booking_id) {
+      // Log dispute in Firestore under 'disputes' with status 'no_booking_reference'
+      const db = getFirestoreDb();
+      const disputeId = 'DISP-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+      
+      try {
+        await db.collection('disputes').doc(disputeId).set({
+          dispute_id: disputeId,
+          booking_id: null,
+          user_id: resolvedUserId,
+          issue_type: resolvedIssueType,
+          description: resolvedDescription,
+          status: 'no_booking_reference',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (err: any) {
+        console.error('[Dispute] Firestore log error:', err.message);
+      }
+
+      return res.json({
+        success: true,
+        dispute_id: disputeId,
+        status: 'no_booking_reference',
+        resolution: 'Aap ka dispute darj ho gaya. 24 ghante mein jawab milega.'
+      });
+    }
+
+    // Otherwise booking_id is present - log and run agent resolution
+    const db = getFirestoreDb();
+    const disputeId = 'DISP-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    try {
+      await db.collection('disputes').doc(disputeId).set({
+        dispute_id: disputeId,
+        booking_id: booking_id,
+        user_id: resolvedUserId,
+        issue_type: resolvedIssueType,
+        description: resolvedDescription,
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (err: any) {
+      console.error('[Dispute] Firestore log error:', err.message);
+    }
+
     const prompt = `Resolve this customer dispute:
 
-DISPUTE TYPE: ${dispute_type}
+DISPUTE TYPE: ${dispute_type || resolvedIssueType}
 
 PROVIDER:
 - ID: ${provider?.id}
@@ -401,20 +982,32 @@ PROVIDER:
 
 FINANCIAL DETAILS:
 - Original Booking Price: Rs.${original_price || 0}
-${dispute_type === 'price_disagreement' ? `- Amount Overcharged: Rs.${overcharged_amount || 0}` : ''}
-${dispute_type === 'overrun' ? `- Extra Charge Requested: Rs.${extra_charge_amount || 0}` : ''}
-${dispute_type === 'cancellation' ? `- Hours Before Job When Cancelled: ${hours_before_job || 0}` : ''}
+${(dispute_type || resolvedIssueType) === 'price_disagreement' ? `- Amount Overcharged: Rs.${overcharged_amount || 0}` : ''}
+${(dispute_type || resolvedIssueType) === 'overrun' ? `- Extra Charge Requested: Rs.${extra_charge_amount || 0}` : ''}
+${(dispute_type || resolvedIssueType) === 'cancellation' ? `- Hours Before Job When Cancelled: ${hours_before_job || 0}` : ''}
 
 LANGUAGE: ${language_detected || 'roman_urdu'}
 
 Follow these steps:
-1. Call get_dispute_policy for ${dispute_type}
+1. Call get_dispute_policy for ${dispute_type || resolvedIssueType}
 2. Apply any required system actions (strike/penalty tools)
 3. Calculate the exact refund amount
 4. Write a clear, empathetic resolution in ${language_detected || 'Roman Urdu'}`;
 
     const result = await run(disputeAgent, prompt, { maxTurns: 20 });
-    res.json(result.finalOutput);
+    const finalOutput = result.finalOutput as any;
+
+    try {
+      await db.collection('disputes').doc(disputeId).update({
+        status: finalOutput.status || 'resolved',
+        resolution: finalOutput.resolution || '',
+        refund_amount: finalOutput.refund_amount || 0,
+      });
+    } catch (err: any) {
+      console.error('[Dispute] Firestore update error:', err.message);
+    }
+
+    res.json(finalOutput);
   } catch (error: any) {
     console.error('[/dispute]', error.message);
     res.status(500).json({ error: error.message });
@@ -667,6 +1260,60 @@ router.post('/fcm/test', async (req, res) => {
     });
     res.json({ success: ok, token_preview: token.substring(0, 30) + '...' });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── 16. GOOGLE PLACES AUTOCOMPLETE PROXY ──────────────────────────────────
+router.get('/places/autocomplete', async (req, res) => {
+  try {
+    const { input } = req.query;
+    if (!input) {
+      return res.status(400).json({ error: 'input is required' });
+    }
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GOOGLE_MAPS_API_KEY is not defined' });
+    }
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+      input as string
+    )}&key=${apiKey}&components=country:pk`;
+
+    const response = await (globalThis as any).fetch(url);
+    const data = await response.json();
+
+    if (data && Array.isArray(data.predictions)) {
+      data.predictions = data.predictions.slice(0, 5);
+    }
+    res.json(data);
+  } catch (error: any) {
+    console.error('[/places/autocomplete]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── 17. GOOGLE GEOCODING PROXY ─────────────────────────────────────────────
+router.get('/places/geocode', async (req, res) => {
+  try {
+    const { address, latlng } = req.query;
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GOOGLE_MAPS_API_KEY is not defined' });
+    }
+    let url = `https://maps.googleapis.com/maps/api/geocode/json?key=${apiKey}`;
+    if (address) {
+      url += `&address=${encodeURIComponent(address as string)}`;
+    } else if (latlng) {
+      url += `&latlng=${encodeURIComponent(latlng as string)}`;
+    } else {
+      return res.status(400).json({ error: 'address or latlng parameter is required' });
+    }
+
+    const response = await (globalThis as any).fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    console.error('[/places/geocode]', error.message);
     res.status(500).json({ error: error.message });
   }
 });

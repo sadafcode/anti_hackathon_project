@@ -76,6 +76,7 @@ class FirestoreService {
       'colorIndex': p.colorIndex,
       'gender': p.gender,
       'photoUrl': p.photoUrl ?? '',
+      'coordinates': p.coordinates,
       'recentReviews': p.recentReviews.map((r) => {
         'reviewer': r.reviewer,
         'text': r.text,
@@ -113,6 +114,9 @@ class FirestoreService {
       colorIndex: d['colorIndex'] ?? 0,
       gender: d['gender'] ?? 'male',
       photoUrl: d['photoUrl'],
+      coordinates: d['coordinates'] != null
+          ? Map<String, dynamic>.from(d['coordinates'])
+          : {'lat': 33.7215, 'lng': 73.0433},
       recentReviews: ((d['recentReviews'] ?? []) as List).map((r) => Review(
         reviewer: r['reviewer'] ?? '',
         text: r['text'] ?? '',

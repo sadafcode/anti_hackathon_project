@@ -1,15 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/provider_model.dart';
+import '../models/pricing_model.dart';
 import '../services/booking_firestore_service.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 import 'pricing_screen.dart';
 
 class ProviderProfileScreen extends StatefulWidget {
   final ProviderModel provider;
+  final void Function(PricingModel pricing, String contractId)? onContractCreated;
 
-  const ProviderProfileScreen({super.key, required this.provider});
+  const ProviderProfileScreen({
+    super.key,
+    required this.provider,
+    this.onContractCreated,
+  });
 
   @override
   State<ProviderProfileScreen> createState() => _ProviderProfileScreenState();
@@ -700,13 +707,57 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
             Expanded(
               flex: 2,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PricingScreen(provider: p),
-                    ),
+                onPressed: () async {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => const Center(child: CircularProgressIndicator()),
                   );
+
+                  try {
+                    final mockIntent = {
+                      'service_type': p.serviceTypes.isNotEmpty ? p.serviceTypes.first : 'other',
+                      'location': {'area': p.area, 'city': 'Islamabad'},
+                      'datetime': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+                      'urgency': 'medium',
+                      'budget_sensitive': false,
+                      'job_complexity': 'basic'
+                    };
+
+                    final pricingJson = await ApiService.getPricing(
+                      p.toJson(), 
+                      mockIntent, 
+                      false, 
+                      userId: ApiService.sessionId,
+                    );
+                    final pricingModel = PricingModel.fromJson(pricingJson);
+                    final contractId = pricingJson['contract_id'] as String? ?? '';
+
+                    if (context.mounted) {
+                      Navigator.pop(context); // Close loading
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PricingScreen(
+                            provider: p,
+                            pricing: pricingModel,
+                            contractId: contractId,
+                            onContractCreated: (pricing, cId) {
+                              widget.onContractCreated?.call(pricing, cId);
+                              Navigator.pop(context); // Close profile screen
+                            },
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      Navigator.pop(context); // Close loading
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error loading pricing: $e')),
+                      );
+                    }
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
