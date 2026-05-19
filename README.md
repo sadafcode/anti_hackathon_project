@@ -4,6 +4,22 @@
 
 ---
 
+## What We Built
+
+Most hackathon projects ship a demo. We built a real, production-ready platform.
+
+Any service provider — plumber, electrician, AC technician, tutor — anywhere in Pakistan can open the app, register with their NIC card, and start receiving AI-matched bookings immediately. The 8 providers in the seed dataset are demo data; every new real registration is treated identically by all 7 agents and all 13 ranking factors.
+
+**Three things we built beyond the challenge prompt:**
+
+| | |
+|---|---|
+| **Voice input in all three languages** | Users who cannot type can speak their request in Roman Urdu, Urdu script, or English — speech-to-text feeds directly into the NLU agent |
+| **Real NIC verification — no government API needed** | Provider photographs their NIC card → Google ML Kit reads the number via on-device OCR → matched against the typed NIC number. No mock database, no external service required |
+| **Full Pakistan coverage** | Not limited to any city or region — Google Maps handles real distance and travel time for any geocodable address anywhere in Pakistan |
+
+---
+
 ## Overview
 
 Pakistan's informal service economy — plumbers, electricians, AC technicians, tutors, beauticians, drivers, mechanics — runs almost entirely on WhatsApp messages and phone calls. There is no structured discovery, no transparent pricing, no booking confirmation, and no dispute resolution.
@@ -14,6 +30,8 @@ Pakistan's informal service economy — plumbers, electricians, AC technicians, 
 > User: "AC bilkul kaam nahi kar raha, kal subah G-13 mein technician chahiye, budget zyada nahi hai"
 
 The system understands the request, ranks providers using 13 weighted factors, generates a transparent price quote, books the best match, notifies the provider, and follows up after the job.
+
+![](<images for readmefile/main.png>)
 
 ---
 
@@ -115,14 +133,14 @@ Stress test traces in `antigravity_artifact/`:
 │  │  (Agent 6)   │  │ (No-show, Quality, Price, Overrun)│    │
 │  └──────────────┘  └──────────────────────────────────┘    │
 │                                                             │
-│  Services: Gemini Flash · Firebase Admin · FCM · NADRA Mock │
+│  Services: Gemini Flash · Firebase Admin · FCM · ML Kit OCR  │
 └─────────────────────────────────────────────────────────────┘
                          │
         ┌────────────────┼───────────────┐
         │                │               │
   ┌─────▼──┐      ┌──────▼──┐    ┌──────▼──┐
-  │Firebase │      │ Google  │    │  Mock   │
-  │Firestore│      │Maps API │    │  NADRA  │
+  │Firebase │      │ Google  │    │ ML Kit  │
+  │Firestore│      │Maps API │    │  OCR    │
   │(Bookings│      │(Distance│    │  (NIC   │
   │Providers│      │ Travel) │    │Verif.)  │
   └─────────┘      └─────────┘    └─────────┘
@@ -174,6 +192,8 @@ Parses raw multilingual user input into structured intent.
   "follow_up_needed": false
 }
 ```
+
+![](<images for readmefile/agent2.png>)
 
 ---
 
@@ -251,6 +271,8 @@ Base Rate (by complexity tier)
 }
 ```
 
+![](<images for readmefile/agent4.png>)
+
 ---
 
 ### Agent 5 — Booking Agent
@@ -269,6 +291,8 @@ Handles end-to-end booking simulation.
   - Auto-reschedule: next best available provider found
   - Provider profile updated: `cancellation_rate +1`, `reliability_score -10`, `risk_score` escalates
   - "Cancel ke baad cancel" warning banner visible on provider profile
+
+![](<images for readmefile/notification.png>)
 
 ---
 
@@ -342,6 +366,8 @@ Soch raha hoon...
 ✓ Decision: Ali Hassan best match
 ```
 
+![](<images for readmefile/reasoning panel.png>)
+
 ---
 
 ## Provider Dataset Schema
@@ -402,25 +428,21 @@ Soch raha hoon...
 
 ---
 
-## NADRA Verification (Mock)
+## NADRA NIC Verification
 
-Providers can optionally submit their NIC (National Identity Card) number during registration. The system checks against a mock NADRA database.
+Providers optionally verify their identity during registration using their National Identity Card. No government API or external service is required — verification runs entirely on-device using Google ML Kit.
 
-- Verified → `blue_tick: true`, trust score boost in ranking
-- Not submitted → `blue_tick: false`, no penalty (verification is optional)
-- NIC Scanner screen uses Google ML Kit OCR to extract NIC from camera capture
+**Verification flow:**
+1. Provider uses the in-app NIC Scanner to photograph their NIC card
+2. Provider types their NIC number manually into the registration form
+3. Google ML Kit (on-device OCR) reads the NIC number from the card photo
+4. System compares the OCR-extracted number against the typed number
+5. Match → `blue_tick: true`, trust score boost applied in Discovery ranking
+6. No match or skipped → `blue_tick: false`, no penalty (verification is optional)
 
-**Mock NADRA Database:**
-```
-4210112345671 → Ali Hassan     → verified
-3520198765432 → Tariq Mehmood → verified
-6110187654321 → Bilal Ahmed   → verified
-3520112233445 → Usman Ali     → verified
-6110198877665 → Sana Malik    → verified
-4210187654322 → Aslam Khan    → verified
-3310145678901 → Kamran Shah   → unverified
-4220156789012 → Shahid Iqbal  → unverified
-```
+The blue tick appears on the provider's profile card and contributes a 2% weight in the 13-factor ranking algorithm. When multiple providers score closely, verified providers are preferred.
+
+The 8 seed providers in the dataset have pre-assigned `blue_tick` values for demo purposes; every newly registered real provider goes through this live OCR flow.
 
 ---
 
@@ -437,8 +459,7 @@ Providers can optionally submit their NIC (National Identity Card) number during
 | **Firebase Cloud Messaging (FCM)** | Push notifications to providers |
 | **Google Maps Flutter** | Location pin drop, nearby provider markers |
 | **Google Speech-to-Text** | Voice input in chat screen |
-| **Google ML Kit Text Recognition** | NIC number OCR scanning |
-| **Mock NADRA API** | NIC-based provider verification |
+| **Google ML Kit Text Recognition** | NIC number OCR scanning + on-device verification |
 | **Express.js** | REST API server |
 | **Zod** | Runtime schema validation |
 
@@ -527,7 +548,7 @@ The system handles 3 language modes with automatic detection:
 | Discovery + Ranking | GPT-4o-mini | ~1,200 tokens | ~$0.00024 |
 | Pricing generation | GPT-4o-mini | ~800 tokens | ~$0.00016 |
 | Booking confirmation | GPT-4o-mini | ~600 tokens | ~$0.00012 |
-| **Total per booking** | | ~3,400 tokens | **~$0.006** |
+| **Total per booking** | | ~3,400 tokens | **~$0.0006** |
 
 At 10,000 bookings/day → ~$6/day in AI costs.
 
@@ -555,7 +576,7 @@ At 10,000 bookings/day → ~$6/day in AI costs.
 - NIC numbers are used only for NADRA verification during provider registration and are never returned in API responses to customers
 - Provider NIC data is stored encrypted in Firestore
 - Customer location data (GPS coordinates) is used only for distance calculation and is not stored permanently
-- The mock NADRA database contains fictitious NIC numbers — no real citizen data is used
+- NIC card photos captured during registration are processed on-device by Google ML Kit and are not uploaded to or stored on the server
 - Photos uploaded via Firebase Storage are accessible only via signed URLs
 - No customer financial data is stored — payments are simulated only
 
@@ -564,10 +585,9 @@ At 10,000 bookings/day → ~$6/day in AI costs.
 ## Assumptions and Limitations
 
 **Assumptions:**
-- All providers are based in Islamabad (sectors G-11, G-13, F-10, F-8, I-8)
+- The 8 seed providers in the dataset are from Islamabad sectors (G-11, G-13, F-10, F-8, I-8); real providers from any city or region in Pakistan can register and are fully supported
 - Payment processing is simulated — no real payment gateway integrated
 - WhatsApp notifications are simulated — no real WhatsApp Business API key used
-- NADRA verification uses a mock database — not connected to real NADRA systems
 - Voice input requires microphone permission on device
 
 **Limitations:**
@@ -709,4 +729,4 @@ anti_hackathon_project/
 
 ---
 
-*Built for Google Antigravity Hackathon — Challenge 2 | Team: Sadaf Fawad & Ruba Ahmed Khan*
+*Built for Google Antigravity Hackathon — Challenge 2 | Team: Sadaf*
