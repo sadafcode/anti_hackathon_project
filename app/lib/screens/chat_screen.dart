@@ -5,7 +5,6 @@ import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/provider_card_bubble.dart';
-import '../widgets/micro_contract_card.dart';
 import '../widgets/reasoning_panel.dart';
 import '../widgets/typing_indicator.dart';
 import 'map_picker_screen.dart';
@@ -43,6 +42,42 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _initSpeech();
     _addWelcomeMessage();
+    ApiService.registerReturnToChat(_handleDeclineReturn);
+  }
+
+  void _handleDeclineReturn() {
+    final action = ApiService.pendingPostDeclineAction;
+    if (action == null) return;
+    ApiService.pendingPostDeclineAction = null;
+
+    final declinedName = action['declined_name'] as String? ?? 'Provider';
+
+    if (action['type'] == 'show_next') {
+      final nextJson = Map<String, dynamic>.from(action['next_provider_json'] as Map);
+      final nextProvider = ProviderModel.fromJson(nextJson);
+      final nextIdx = _currentProviders?.indexWhere((p) => p.id == nextProvider.id) ?? -1;
+      if (nextIdx >= 0) {
+        _currentProviderIndex = nextIdx;
+      } else {
+        _currentProviders = [nextProvider, ...?_currentProviders];
+        _currentProviderIndex = 0;
+      }
+      setState(() {
+        _messages.add(Message.agent('$declinedName ne request decline kar di. Yeh raha agla best provider:'));
+        _messages.add(Message.providerCard(
+          nextProvider,
+          requestedDatetime: ApiService.lastConfirmedIntent?['datetime'] as String?,
+          serviceDetails: ApiService.lastConfirmedIntent?['service_details'] as String?,
+        ));
+      });
+    } else {
+      setState(() {
+        _messages.add(Message.agent(
+          '$declinedName ne aapki request decline kar di.\n\nMaafi chahte hain — is waqt aapke area mein koi doosra provider available nahi hai. Thodi der baad dobara try karein.',
+        ));
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   void _addWelcomeMessage() {
@@ -137,7 +172,7 @@ class _ChatScreenState extends State<ChatScreen> {
              setState(() {
                _currentProviders = [suggested];
                _currentProviderIndex = 0;
-               _messages.add(Message.providerCard(suggested, requestedDatetime: confirmedIntent['datetime'] as String?));
+               _messages.add(Message.providerCard(suggested, requestedDatetime: confirmedIntent['datetime'] as String?, serviceDetails: confirmedIntent['service_details'] as String?));
              });
              _scrollToBottom();
            }
@@ -158,7 +193,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 locationHint: confirmedIntent['location']['area'],
                 topProvider: providers.first,
               ));
-              _messages.add(Message.providerCard(providers.first, requestedDatetime: confirmedIntent['datetime'] as String?));
+              _messages.add(Message.providerCard(providers.first, requestedDatetime: confirmedIntent['datetime'] as String?, serviceDetails: confirmedIntent['service_details'] as String?));
            });
            _scrollToBottom();
 
@@ -196,7 +231,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final next = _currentProviders![_currentProviderIndex];
     setState(() {
       _messages.add(Message.agent('Dosra option:'));
-      _messages.add(Message.providerCard(next, requestedDatetime: ApiService.lastConfirmedIntent?['datetime'] as String?));
+      _messages.add(Message.providerCard(next, requestedDatetime: ApiService.lastConfirmedIntent?['datetime'] as String?, serviceDetails: ApiService.lastConfirmedIntent?['service_details'] as String?));
     });
     _scrollToBottom();
   }
@@ -405,23 +440,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       provider: msg.provider!,
                       onShowAlternative: _showNextProvider,
                       requestedDatetime: msg.requestedDatetime,
-                      onContractCreated: (pricing, contractId) {
-                        setState(() {
-                          _messages.add(Message.contract(
-                            pricing: pricing,
-                            contractId: contractId,
-                            provider: msg.provider!,
-                          ));
-                        });
-                        _scrollToBottom();
-                      },
+                      serviceDetails: msg.serviceDetails,
+                      onContractCreated: (p, c) {}, // handled inside PricingScreen
                     );
                   case MessageType.contract:
-                    return MicroContractCard(
-                      contractId: msg.contractId!,
-                      provider: msg.provider!,
-                      pricing: msg.pricing!,
-                    );
+                    return const SizedBox.shrink(); // no longer shown in chat
                 }
               },
             ),

@@ -397,125 +397,246 @@ class _ProviderNotificationScreenState
 
   Widget _buildBookingCard() {
     final area = _realBooking?['area'] as String? ?? 'Unknown Area';
-    final serviceType = _realBooking?['serviceType'] as String? ?? 'Service';
+    final fullAddress = _realBooking?['fullAddress'] as String?;
+    final serviceType = (_realBooking?['serviceType'] as String? ?? 'Service').replaceAll('_', ' ');
+    final serviceDetails = _realBooking?['serviceDetails'] as String?;
     final datetime = _realBooking?['datetime'] as String? ?? '';
     final amount = _realBooking?['amount'] ?? 0;
     final bookingId = _realBooking?['id'] as String? ?? 'N/A';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryLight,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'C',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryLight,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'C',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Customer',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                          Text(
+                            area,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppTheme.textGrey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppTheme.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.near_me_outlined,
+                              size: 12, color: AppTheme.primary),
+                          SizedBox(width: 3),
+                          Text(
+                            'Nearby',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Customer',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textDark,
+              ),
+              // Highlighted address block
+              Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, color: Colors.amber.shade800, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Yahan Jana Hai:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.amber.shade900,
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      fullAddress ?? area,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.amber.shade900,
+                        height: 1.3,
                       ),
-                      Text(
-                        area,
-                        style: const TextStyle(
-                            fontSize: 12, color: AppTheme.textGrey),
-                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _detailRow(Icons.build_outlined, 'Service', serviceType),
+                    if (serviceDetails != null && serviceDetails.isNotEmpty) ...[
+                      _divider(),
+                      _detailRow(Icons.description_outlined, 'Kaam', serviceDetails),
                     ],
-                  ),
+                    _divider(),
+                    _detailRow(
+                        Icons.calendar_today_outlined, 'Date/Time', datetime),
+                    _divider(),
+                    _detailRow(
+                      Icons.payments_outlined,
+                      'Offered Price',
+                      'Rs. $amount',
+                      valueColor: AppTheme.primary,
+                      valueBold: true,
+                    ),
+                    _divider(),
+                    _detailRow(Icons.confirmation_number_outlined, 'Booking ID',
+                        bookingId),
+                  ],
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: AppTheme.primary.withValues(alpha: 0.3)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.near_me_outlined,
-                          size: 12, color: AppTheme.primary),
-                      SizedBox(width: 3),
-                      Text(
-                        'Nearby',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _detailRow(Icons.build_outlined, 'Service', serviceType),
-                _divider(),
-                _detailRow(
-                    Icons.calendar_today_outlined, 'Date/Time', datetime),
-                _divider(),
-                _detailRow(
-                  Icons.payments_outlined,
-                  'Offered Price',
-                  'Rs. $amount',
-                  valueColor: AppTheme.primary,
-                  valueBold: true,
-                ),
-                _divider(),
-                _detailRow(Icons.confirmation_number_outlined, 'Booking ID',
-                    bookingId),
-              ],
-            ),
+        ),
+        const SizedBox(height: 12),
+        // RED warning: scope limitation
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.red.shade400, width: 1.5),
           ),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.warning_rounded, color: Colors.red.shade700, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    'ZAROORI — Sirf Yahi Kaam Karo',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.red.shade800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                serviceDetails != null && serviceDetails.isNotEmpty
+                    ? 'Is booking mein sirf yeh kaam hai: "$serviceDetails"\n\nAgar aap ne is ke alawa koi bhi extra kaam kiya, to client us ka extra amount dene ka paband nahi — woh aapki apni zimmedari hogi.'
+                    : 'Is booking mein sirf "$serviceType" ka kaam hai.\n\nAgar aap ne is ke alawa koi bhi extra kaam kiya, to client extra amount dene ka paband nahi — woh aapki apni zimmedari hogi.',
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700, height: 1.5),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // RED warning: dispute consequences
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.red.shade400, width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.gavel_rounded, color: Colors.red.shade700, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    'ZAROORI — Dispute ke Nataij',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.red.shade800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Agar client dispute file kare aur team ki review ke baad aap haar jayen to:\n• Aapki profile suspend ya delete ho sakti hai\n• Rating aur cancellation rate affect hoga\n• Platform se remove bhi ho sakte hain',
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -705,7 +826,9 @@ class _ProviderNotificationScreenState
 
   Widget _buildAcceptedView() {
     final area = _realBooking?['area'] as String? ?? 'Unknown Area';
-    final serviceType = _realBooking?['serviceType'] as String? ?? 'Service';
+    final fullAddress = _realBooking?['fullAddress'] as String?;
+    final serviceType = (_realBooking?['serviceType'] as String? ?? 'Service').replaceAll('_', ' ');
+    final serviceDetails = _realBooking?['serviceDetails'] as String?;
     final datetime = _realBooking?['datetime'] as String? ?? '';
     final amount = _realBooking?['amount'] as int? ?? 0;
 
@@ -760,12 +883,15 @@ class _ProviderNotificationScreenState
                 children: [
                   _detailRow(Icons.person_outline, 'Customer', 'Customer'),
                   _divider(),
-                  _detailRow(Icons.location_on_outlined, 'Location', area),
+                  _detailRow(Icons.location_on_outlined, 'Location', fullAddress ?? area),
                   _divider(),
                   _detailRow(Icons.build_outlined, 'Service', serviceType),
+                  if (serviceDetails != null && serviceDetails.isNotEmpty) ...[
+                    _divider(),
+                    _detailRow(Icons.description_outlined, 'Kaam', serviceDetails),
+                  ],
                   _divider(),
-                  _detailRow(Icons.calendar_today_outlined, 'Date & Time',
-                      datetime),
+                  _detailRow(Icons.calendar_today_outlined, 'Date & Time', datetime),
                   _divider(),
                   _detailRow(
                     Icons.payments_outlined,

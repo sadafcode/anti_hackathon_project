@@ -829,10 +829,6 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                             provider: p,
                             pricing: pricingModel,
                             contractId: contractId,
-                            onContractCreated: (pricing, cId) {
-                              widget.onContractCreated?.call(pricing, cId);
-                              Navigator.pop(context); // Close profile screen
-                            },
                           ),
                         ),
                       );

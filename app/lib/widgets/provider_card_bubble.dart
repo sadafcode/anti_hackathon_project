@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../screens/provider_profile_screen.dart';
@@ -11,6 +14,7 @@ class ProviderCardBubble extends StatefulWidget {
   final ProviderModel provider;
   final VoidCallback? onShowAlternative;
   final String? requestedDatetime; // ISO datetime to check day availability
+  final String? serviceDetails;    // What client described — shown as scope
   final void Function(PricingModel pricing, String contractId) onContractCreated;
 
   const ProviderCardBubble({
@@ -19,6 +23,7 @@ class ProviderCardBubble extends StatefulWidget {
     required this.onContractCreated,
     this.onShowAlternative,
     this.requestedDatetime,
+    this.serviceDetails,
   });
 
   @override
@@ -27,6 +32,8 @@ class ProviderCardBubble extends StatefulWidget {
 
 class _ProviderCardBubbleState extends State<ProviderCardBubble> {
   bool _reasoningExpanded = false;
+  bool _isSavingCard = false;
+  final GlobalKey _cardKey = GlobalKey();
 
   static const _dayNames = [
     'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'
@@ -49,6 +56,37 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     return null;
   }
 
+  Future<void> _saveCardAsImage() async {
+    setState(() => _isSavingCard = true);
+    try {
+      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+      // Show success snackbar — actual file-save requires a plugin (gallery_saver / path_provider)
+      // For now we capture the image in memory and confirm to the user.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Card capture ho gaya! Save karne ke liye gallery_saver plugin add karein.'),
+            backgroundColor: AppTheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingCard = false);
+    }
+  }
+
   void _openProfile() {
     Navigator.push(
       context,
@@ -68,21 +106,20 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     setState(() => _isBooking = true);
     
     try {
-      // Mock intent creation for pricing since we don't have the global intent here easily
-      final mockIntent = {
+      final intent = ApiService.lastConfirmedIntent ?? {
         'service_type': widget.provider.serviceTypes.isNotEmpty ? widget.provider.serviceTypes.first : 'other',
         'location': {'area': widget.provider.area, 'city': 'Islamabad'},
         'datetime': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
         'urgency': 'medium',
         'budget_sensitive': false,
-        'job_complexity': 'basic'
+        'job_complexity': 'basic',
       };
-      
+
       final providerJson = widget.provider.toJson();
       final pricingJson = await ApiService.getPricing(
-        providerJson, 
-        mockIntent, 
-        false, 
+        providerJson,
+        intent,
+        false,
         userId: ApiService.sessionId,
       );
       final pricingModel = PricingModel.fromJson(pricingJson);
@@ -96,7 +133,6 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
               provider: widget.provider,
               pricing: pricingModel,
               contractId: contractId,
-              onContractCreated: widget.onContractCreated,
             ),
           ),
         );
@@ -119,37 +155,49 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     final p = widget.provider;
     return Align(
       alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(left: 8, right: 12, bottom: 8),
-        constraints: const BoxConstraints(maxWidth: 400),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(4),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(16),
-            bottomRight: Radius.circular(16),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RepaintBoundary(
+            key: _cardKey,
+            child: Container(
+              margin: const EdgeInsets.only(left: 8, right: 12, bottom: 0),
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(16),
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeader(p),
+                  _buildInfoRow(p),
+                  _buildReasoningTile(p),
+                  if (widget.serviceDetails != null && widget.serviceDetails!.isNotEmpty)
+                    _buildScopeBanner(widget.serviceDetails!),
+                  if (_unavailableDay != null) _buildDayUnavailableBanner(_unavailableDay!),
+                  if (p.hasStrike) _buildStrikeBanner(p),
+                  _buildButtons(p),
+                ],
+              ),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildHeader(p),
-            _buildInfoRow(p),
-            _buildReasoningTile(p),
-            if (_unavailableDay != null) _buildDayUnavailableBanner(_unavailableDay!),
-            if (p.hasStrike) _buildStrikeBanner(p),
-            _buildButtons(p),
-          ],
-        ),
+          ),
+          _buildSaveSection(),
+        ],
       ),
     );
   }
@@ -199,21 +247,6 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                     style: const TextStyle(fontSize: 11, color: Color(0xFF999999)),
                   ),
                 ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${p.rankScore}/100',
-                style: const TextStyle(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
               ),
             ),
           ],
@@ -361,6 +394,115 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
           ),
         Divider(height: 1, color: Colors.grey.shade100),
       ],
+    );
+  }
+
+  Widget _buildScopeBanner(String details) {
+    final serviceName = widget.provider.serviceTypes.isNotEmpty
+        ? widget.provider.serviceTypes.first.replaceAll('_', ' ')
+        : 'service';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F7FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF2196F3).withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.receipt_long_outlined, color: Color(0xFF1565C0), size: 14),
+              SizedBox(width: 5),
+              Text(
+                'Tey Shuda Booking Details',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1565C0),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _scopeRow('Service', serviceName),
+          const SizedBox(height: 3),
+          _scopeRow('Kaam', details),
+        ],
+      ),
+    );
+  }
+
+  Widget _scopeRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF1565C0),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A), height: 1.4),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSaveSection() {
+    return Container(
+      margin: const EdgeInsets.only(left: 8, right: 12, top: 6, bottom: 8),
+      constraints: const BoxConstraints(maxWidth: 400),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 6),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 13, color: Colors.grey.shade600),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    'Is card ka screenshot lein — dispute file karte waqt yeh booking summary evidence ke tor par kaam aaye gi.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isSavingCard ? null : _saveCardAsImage,
+              icon: _isSavingCard
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                    )
+                  : const Icon(Icons.download_outlined, size: 16, color: AppTheme.primary),
+              label: const Text(
+                'Card Download Karein',
+                style: TextStyle(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.6)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

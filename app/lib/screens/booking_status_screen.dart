@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../models/provider_model.dart';
 import '../services/booking_firestore_service.dart';
 import '../theme/app_theme.dart';
+import 'service_tracking_screen.dart';
 
 class BookingStatusScreen extends StatelessWidget {
   final String bookingId;
@@ -42,7 +44,7 @@ class BookingStatusScreen extends StatelessWidget {
           final status = data?['status'] as String? ?? 'pending';
 
           return switch (status) {
-            'confirmed' => _buildConfirmed(data!),
+            'confirmed' => _buildConfirmed(context, data!),
             'declined' => _buildDeclined(data?['declineReason'] as String?),
             'cancelled' => _buildCancelled(),
             _ => _buildPending(),
@@ -92,7 +94,42 @@ class BookingStatusScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildConfirmed(Map<String, dynamic> data) {
+  Widget _buildConfirmed(BuildContext context, Map<String, dynamic> data) {
+    final pName = data['providerName'] as String? ?? providerName;
+    final pId = data['providerId'] as String? ?? data['provider_id'] as String? ?? '';
+    final svcType = data['serviceType'] as String? ?? serviceType;
+    final area = data['area'] as String? ?? '';
+    final serviceDetails = data['serviceDetails'] as String?;
+    final fullAddress = data['fullAddress'] as String?;
+
+    final minimalProvider = ProviderModel(
+      id: pId,
+      name: pName,
+      area: area,
+      serviceTypes: [svcType],
+      rating: 0,
+      totalReviews: 0,
+      reviewSentiment: 'unrated',
+      experienceYears: 0,
+      onTimeScore: 100,
+      cancellationRate: 0,
+      hourlyRate: (data['amount'] as num?)?.toDouble() ?? 0,
+      capacityToday: 0,
+      blueTick: false,
+      riskScore: 'low',
+      strikes: 0,
+      isMock: false,
+      distanceKm: 0,
+      certifications: [],
+      toolsAvailable: [],
+      rankScore: 0,
+      rankReason: '',
+      recentReviews: [],
+      colorIndex: 0,
+      coordinates: {},
+      availability: {},
+    );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -126,9 +163,11 @@ class BookingStatusScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _detailCard([
-            _DetailRow(Icons.person_outline, 'Provider', data['providerName'] as String? ?? ''),
-            _DetailRow(Icons.build_outlined, 'Service', data['serviceType'] as String? ?? serviceType),
-            _DetailRow(Icons.location_on_outlined, 'Area', data['area'] as String? ?? ''),
+            _DetailRow(Icons.person_outline, 'Provider', pName),
+            _DetailRow(Icons.build_outlined, 'Service', svcType),
+            if (serviceDetails != null && serviceDetails.isNotEmpty)
+              _DetailRow(Icons.description_outlined, 'Kaam', serviceDetails),
+            _DetailRow(Icons.location_on_outlined, 'Pata', fullAddress ?? area),
             _DetailRow(Icons.calendar_today_outlined, 'Date/Time', data['datetime'] as String? ?? ''),
             _DetailRow(
               Icons.payments_outlined,
@@ -144,6 +183,32 @@ class BookingStatusScreen extends StatelessWidget {
             'Provider jald hi aap se rabta kare ga. Koi masla ho tu KhidmatBot support se milein.',
             AppTheme.primary,
             AppTheme.primaryLight,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ServiceTrackingScreen(
+                    provider: minimalProvider,
+                    bookingId: bookingId,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.track_changes_outlined, color: Colors.white, size: 20),
+              label: const Text(
+                'Kaam Track Karo / Review Do',
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                elevation: 0,
+              ),
+            ),
           ),
         ],
       ),

@@ -16,6 +16,12 @@ class ApiService {
   static List<Map<String, dynamic>> lastDiscoveredProviders = [];
   static Map<String, dynamic>? lastConfirmedIntent;
 
+  // Decline-return mechanism: BookingWaitingScreen signals ChatScreen to show next provider
+  static Map<String, dynamic>? pendingPostDeclineAction;
+  static void Function()? _returnToChatCallback;
+  static void registerReturnToChat(void Function() fn) { _returnToChatCallback = fn; }
+  static void triggerReturnToChat() { _returnToChatCallback?.call(); }
+
   static void _extractTraces(Map<String, dynamic> json) {
     if (json.containsKey('agent_traces') && json['agent_traces'] is List) {
       for (var t in json['agent_traces'] as List) {
@@ -77,13 +83,27 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> acceptContract(String contractId, String party) async {
+  static Future<Map<String, dynamic>> acceptContract(
+    String contractId,
+    String party, {
+    String? providerId,
+    String? serviceType,
+    int? amount,
+    String? datetime,
+    Map<String, dynamic>? intent,
+  }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/contract/accept'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'contract_id': contractId,
         'party': party,
+        if (providerId != null) 'provider_id': providerId,
+        if (serviceType != null) 'service_type': serviceType,
+        if (amount != null) 'amount': amount,
+        if (datetime != null) 'datetime': datetime,
+        if (intent != null) 'intent': intent,
+        'session_id': sessionId,
       }),
     );
 

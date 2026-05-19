@@ -8,7 +8,10 @@ export const ChatOutputSchema = z.object({
   user_emotion: z.enum(['neutral', 'frustrated', 'angry', 'satisfied', 'confused']),
   collected_info: z.object({
     service_type: z.string().nullable().describe('e.g. ac_repair, plumber, electrician, carpenter, tutor, beautician, driver, mechanic, painter, cleaning'),
-    area: z.string().nullable().describe('Customer area e.g. G-11, F-10, Gulberg'),
+    service_details: z.string().nullable().describe('Service-specific info from smart questions e.g. "class 10 maths tutor", "bridal makeup", "pipe leakage repair", "one-way trip to airport"'),
+    house_number: z.string().nullable().describe('House/flat/apartment number e.g. "House 12", "Flat 3B", "D-47"'),
+    street: z.string().nullable().describe('Street, gali, or road name/number e.g. "Street 7", "Gali 3", "Main Boulevard"'),
+    area: z.string().nullable().describe('Customer sector/locality e.g. G-11, F-10, Gulberg, Korangi'),
     city: z.string().nullable().describe('e.g. Islamabad, Lahore, Karachi'),
     datetime_iso: z.string().nullable().describe('ISO datetime e.g. 2026-05-18T09:00:00'),
     urgency: z.enum(['low', 'medium', 'high', 'emergency']).nullable(),

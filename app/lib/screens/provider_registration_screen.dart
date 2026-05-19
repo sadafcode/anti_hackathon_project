@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:pinput/pinput.dart';
@@ -23,6 +26,7 @@ class _ProviderRegistrationScreenState
     extends State<ProviderRegistrationScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
+  final _scrollCtrl = ScrollController();
 
   // Controllers
   final _nameCtrl = TextEditingController();
@@ -73,6 +77,7 @@ class _ProviderRegistrationScreenState
   bool _phoneVerified = false;
   bool _sendingOtp = false;
   bool _verifyingOtp = false;
+  bool _submitAttempted = false;
 
   // NIC verification state
   bool _nicVerified = false;
@@ -93,31 +98,6 @@ class _ProviderRegistrationScreenState
     'Mechanic',
   ];
 
-  static const Map<String, List<String>> _pakistanAreas = {
-    'Lahore': ['Gulberg', 'DHA Lahore Phase 1', 'DHA Lahore Phase 2', 'DHA Lahore Phase 5', 'DHA Lahore Phase 6', 'Model Town', 'Johar Town', 'Bahria Town Lahore', 'Cantt Lahore', 'Garden Town', 'Iqbal Town', 'Shadman', 'Wapda Town', 'Township', 'Faisal Town', 'Cavalry Ground', 'Allama Iqbal Town', 'Samanabad'],
-    'Karachi': ['DHA Karachi', 'Clifton', 'Gulshan-e-Iqbal', 'North Nazimabad', 'Gulistan-e-Jauhar', 'Malir', 'Korangi', 'PECHS', 'Liaquatabad', 'Orangi Town', 'Saddar Karachi', 'Bahria Town Karachi', 'Nazimabad', 'Federal B Area', 'Landhi'],
-    'Islamabad': ['F-6', 'F-7', 'F-8', 'F-10', 'F-11', 'G-6', 'G-7', 'G-8', 'G-9', 'G-10', 'G-11', 'G-13', 'I-8', 'I-9', 'I-10', 'E-7', 'E-11', 'DHA Islamabad', 'Bahria Town Islamabad', 'PWD', 'Gulberg Islamabad'],
-    'Rawalpindi': ['Satellite Town Rawalpindi', 'Chaklala', 'Cantt Rawalpindi', 'Bahria Town Rawalpindi', 'DHA Rawalpindi', 'Sadiqabad', 'Westridge', 'Saddar Rawalpindi', 'Lalazar'],
-    'Faisalabad': ['Peoples Colony', 'Jinnah Colony', 'Millat Town', 'Gulberg Faisalabad', 'Madina Town', 'Susan Road'],
-    'Multan': ['Cantt Multan', 'Gulgasht Colony', 'New Multan', 'Shah Rukn-e-Alam', 'Bosan Road'],
-    'Peshawar': ['Hayatabad', 'University Town', 'Cantt Peshawar', 'Saddar Peshawar', 'Ring Road Peshawar', 'Gulbahar'],
-    'Quetta': ['Satellite Town Quetta', 'Cantt Quetta', 'Jinnah Town', 'Airport Road Quetta', 'Zarghoon Road'],
-    'Hyderabad': ['Latifabad', 'Qasimabad', 'Hirabad', 'Cantt Hyderabad'],
-    'Gujranwala': ['G.T Road Gujranwala', 'Model Town Gujranwala', 'Peoples Colony Gujranwala'],
-    'Sialkot': ['Cantt Sialkot', 'Paris Road', 'Allama Iqbal Road'],
-    'Abbottabad': ['Cantt Abbottabad', 'Mandian', 'Havelian Road', 'PMA Road'],
-    'Gujrat': ['Cantt Gujrat', 'Model Town Gujrat'],
-    'Bahawalpur': ['Model Town Bahawalpur', 'Satellite Town Bahawalpur'],
-    'Sargodha': ['University Road Sargodha', 'Satellite Town Sargodha'],
-    'Sukkur': ['Airport Road Sukkur', 'Rohri'],
-    'Larkana': ['Cantt Larkana', 'Larkana City'],
-    'Mardan': ['Cantt Mardan', 'Mardan City'],
-    'Mingora': ['Swat', 'Mingora City'],
-    'Dera Ghazi Khan': ['Cantt DG Khan', 'DG Khan City'],
-    'Sahiwal': ['Sahiwal City', 'Chichawatni'],
-    'Sheikhupura': ['Sheikhupura City', 'Muridke'],
-    'Rahim Yar Khan': ['RYK City', 'Liaquatpur'],
-  };
 
   static const List<String> _toolOptions = [
     'Multimeter', 'Drill', 'Gas Kit', 'Pipe Wrench',
@@ -130,7 +110,7 @@ class _ProviderRegistrationScreenState
   ];
 
   static const List<String> _timeSlots = [
-    '8am–12pm', '12pm–4pm', '4pm–8pm', 'Evening',
+    'Pura Din', '8am–12pm', '12pm–4pm', '4pm–8pm', 'Evening',
   ];
 
   @override
@@ -148,6 +128,7 @@ class _ProviderRegistrationScreenState
 
   @override
   void dispose() {
+    _scrollCtrl.dispose();
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _nicCtrl.dispose();
@@ -245,6 +226,13 @@ class _ProviderRegistrationScreenState
 
   // ── NIC Verification ───────────────────────────────────────────
   Future<void> _verifyNicFromImage(File imageFile) async {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+      setState(() {
+        _verifyingNic = false;
+        _nicMismatchMsg = 'NIC scan sirf Android aur iOS pe kaam karta hai.';
+      });
+      return;
+    }
     setState(() { _verifyingNic = true; _nicMismatchMsg = null; });
     try {
       final inputImage = InputImage.fromFile(imageFile);
@@ -294,6 +282,10 @@ class _ProviderRegistrationScreenState
   }
 
   Future<void> _scanNicWithCamera() async {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+      _showSnack('NIC scan sirf Android aur iOS pe available hai');
+      return;
+    }
     if (_nicCtrl.text.trim().isEmpty) {
       _showSnack('Pehle NIC number type karein'); return;
     }
@@ -307,19 +299,31 @@ class _ProviderRegistrationScreenState
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    setState(() => _submitAttempted = true);
+    if (!_formKey.currentState!.validate()) {
+      _scrollCtrl.animateTo(0, duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
+      return;
+    }
     if (!_phoneVerified) {
-      _showSnack('Phone number verify karna zaroori hai');
+      _scrollCtrl.animateTo(0, duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
       return;
     }
-    if (_selectedServices.isEmpty) {
-      _showSnack('Kam az kam ek service chunein');
-      return;
-    }
+    if (_selectedServices.isEmpty) return;
     if (_selectedArea == null) {
       _showSnack('Area chunein');
       return;
     }
+
+    final incompleteDay = _availability.entries
+        .where((e) => e.value.isEmpty)
+        .map((e) => e.key)
+        .toList();
+    if (incompleteDay.isNotEmpty) {
+      _showSnack('${incompleteDay.join(', ')} ke liye time slot zaroor chunein');
+      return;
+    }
+
+    if (_availability.isEmpty) return;
 
     setState(() => _submitting = true);
 
@@ -338,6 +342,7 @@ class _ProviderRegistrationScreenState
         'service_types': _selectedServices.map((s) => s.toLowerCase()).toList(),
         'area': _selectedArea,
         'tools': _selectedTools.toList(),
+        'availability': _availability.map((day, slots) => MapEntry(day, slots.toList())),
       };
 
       final response = await ApiService.registerProvider(providerData);
@@ -394,6 +399,7 @@ class _ProviderRegistrationScreenState
     return Form(
       key: _formKey,
       child: SingleChildScrollView(
+        controller: _scrollCtrl,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,6 +431,69 @@ class _ProviderRegistrationScreenState
                 },
               ),
               const SizedBox(height: 8),
+              if (!_phoneVerified)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFFB300)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.science_outlined, size: 13, color: Color(0xFFE65100)),
+                          SizedBox(width: 5),
+                          Text(
+                            'Demo Mode — Test Credentials',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFE65100),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Number:  03492083169  ya  03100017745',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF5D4037)),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'OTP:  123456',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF5D4037),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Firebase SMS OTP integrated — demo ke liye test numbers use karein',
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_submitAttempted && !_phoneVerified)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, size: 13, color: Colors.red),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Phone number verify karna zaroori hai',
+                        style: TextStyle(fontSize: 11, color: Colors.red.shade600),
+                      ),
+                    ],
+                  ),
+                ),
               _phoneVerified
                   ? _buildVerifiedBadge('Phone Verified', Icons.phone_in_talk)
                   : SizedBox(
@@ -541,6 +610,18 @@ class _ProviderRegistrationScreenState
             _buildSectionHeader('Services', Icons.build_outlined),
             const SizedBox(height: 10),
             _buildServiceSelector(),
+            if (_submitAttempted && _selectedServices.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 13, color: Colors.red),
+                    const SizedBox(width: 4),
+                    Text('Kam az kam ek service chunein',
+                        style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
+                  ],
+                ),
+              ),
             const SizedBox(height: 20),
 
             _buildSectionHeader('Location & Experience', Icons.location_on_outlined),
@@ -612,7 +693,21 @@ class _ProviderRegistrationScreenState
             _buildSectionHeader('Availability', Icons.calendar_month_outlined),
             const SizedBox(height: 10),
             _buildAvailabilityPicker(),
+            if (_submitAttempted && _availability.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 13, color: Colors.red),
+                    const SizedBox(width: 4),
+                    Text('Kam az kam ek din aur time slot chunein',
+                        style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
+                  ],
+                ),
+              ),
             const SizedBox(height: 28),
+
+            if (_submitAttempted) _buildValidationSummary(),
 
             _buildRegisterButton(),
             const SizedBox(height: 16),
@@ -1073,7 +1168,6 @@ class _ProviderRegistrationScreenState
       builder: (_) => _AreaSearchSheet(
         onSelected: (area) => setState(() => _selectedArea = area),
         selectedArea: _selectedArea,
-        areas: _pakistanAreas,
       ),
     );
   }
@@ -1134,6 +1228,7 @@ class _ProviderRegistrationScreenState
   }
 
   Widget _buildAvailabilityPicker() {
+    final allDaysSelected = _weekDays.every((d) => _availability.containsKey(d));
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1150,10 +1245,44 @@ class _ProviderRegistrationScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Din aur time slots chunein',
-            style:
-                TextStyle(fontSize: 12, color: AppTheme.textGrey),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Din aur time slots chunein',
+                style: TextStyle(fontSize: 12, color: AppTheme.textGrey),
+              ),
+              GestureDetector(
+                onTap: () => setState(() {
+                  if (allDaysSelected) {
+                    _availability.clear();
+                  } else {
+                    for (final d in _weekDays) {
+                      _availability[d] = {'Pura Din'};
+                    }
+                  }
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: allDaysSelected ? AppTheme.primary : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: allDaysSelected ? AppTheme.primary : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Text(
+                    allDaysSelected ? 'Sab hatao' : 'Saare Din',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: allDaysSelected ? Colors.white : AppTheme.textGrey,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           ..._weekDays.map((day) {
@@ -1189,17 +1318,29 @@ class _ProviderRegistrationScreenState
                                   : Colors.grey.shade300,
                             ),
                           ),
-                          child: Center(
-                            child: Text(
-                              day,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: daySelected
-                                    ? Colors.white
-                                    : AppTheme.textGrey,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                day,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: daySelected
+                                      ? Colors.white
+                                      : AppTheme.textGrey,
+                                ),
                               ),
-                            ),
+                              if (!daySelected)
+                                Text(
+                                  'off',
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.grey.shade400,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1209,28 +1350,36 @@ class _ProviderRegistrationScreenState
                               spacing: 6,
                               runSpacing: 4,
                               children: _timeSlots.map((slot) {
-                                final slotSelected =
-                                    slots.contains(slot);
+                                final slotSelected = slots.contains(slot);
+                                final isPuraDin = slot == 'Pura Din';
                                 return GestureDetector(
                                   onTap: () => setState(() {
-                                    slotSelected
-                                        ? slots.remove(slot)
-                                        : slots.add(slot);
+                                    if (isPuraDin) {
+                                      if (slotSelected) {
+                                        slots.remove('Pura Din');
+                                      } else {
+                                        slots.clear();
+                                        slots.add('Pura Din');
+                                      }
+                                    } else {
+                                      slots.remove('Pura Din');
+                                      slotSelected
+                                          ? slots.remove(slot)
+                                          : slots.add(slot);
+                                    }
                                     _availability[day] = slots;
                                   }),
                                   child: AnimatedContainer(
-                                    duration: const Duration(
-                                        milliseconds: 180),
-                                    padding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4),
+                                    duration: const Duration(milliseconds: 180),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: slotSelected
-                                          ? AppTheme.primaryLight
+                                          ? (isPuraDin
+                                              ? AppTheme.primary
+                                              : AppTheme.primaryLight)
                                           : Colors.grey.shade100,
-                                      borderRadius:
-                                          BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: slotSelected
                                             ? AppTheme.primary
@@ -1242,7 +1391,9 @@ class _ProviderRegistrationScreenState
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: slotSelected
-                                            ? AppTheme.primary
+                                            ? (isPuraDin
+                                                ? Colors.white
+                                                : AppTheme.primary)
                                             : AppTheme.textGrey,
                                         fontWeight: slotSelected
                                             ? FontWeight.w600
@@ -1255,11 +1406,13 @@ class _ProviderRegistrationScreenState
                             ),
                           )
                         else
-                          const Text(
-                            'Is din available nahi',
+                          Text(
+                            'Tap kar ke available karo',
                             style: TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.textGrey),
+                              fontSize: 11,
+                              color: Colors.grey.shade400,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                       ],
                     ),
@@ -1268,6 +1421,65 @@ class _ProviderRegistrationScreenState
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValidationSummary() {
+    final errors = <String>[];
+    if (_nameCtrl.text.trim().isEmpty) errors.add('Pura naam likho');
+    if (!_phoneVerified) errors.add('Phone number verify karo');
+    if (_selectedServices.isEmpty) errors.add('Kam az kam ek service chuno');
+    if (_selectedArea == null) errors.add('Area chuno');
+    if (_availability.isEmpty) errors.add('Kam az kam ek din select karo');
+    final incompleteDay = _availability.entries
+        .where((e) => e.value.isEmpty)
+        .map((e) => e.key)
+        .join(', ');
+    if (incompleteDay.isNotEmpty) errors.add('$incompleteDay ka time slot chuno');
+
+    if (errors.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cancel_outlined, size: 15, color: Colors.red.shade700),
+              const SizedBox(width: 6),
+              Text(
+                'Register karne se pehle yeh complete karo:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...errors.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('• ', style: TextStyle(color: Colors.red.shade600, fontSize: 12)),
+                    Expanded(
+                      child: Text(e,
+                          style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+                    ),
+                  ],
+                ),
+              )),
         ],
       ),
     );
@@ -1591,12 +1803,10 @@ class _ProviderRegistrationScreenState
 class _AreaSearchSheet extends StatefulWidget {
   final void Function(String) onSelected;
   final String? selectedArea;
-  final Map<String, List<String>> areas;
 
   const _AreaSearchSheet({
     required this.onSelected,
     required this.selectedArea,
-    required this.areas,
   });
 
   @override
@@ -1605,42 +1815,65 @@ class _AreaSearchSheet extends StatefulWidget {
 
 class _AreaSearchSheetState extends State<_AreaSearchSheet> {
   final _searchCtrl = TextEditingController();
-  List<_AreaItem> _filtered = [];
-  List<_AreaItem> _all = [];
+  List<Map<String, String>> _suggestions = [];
+  bool _loading = false;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _all = widget.areas.entries.expand((entry) {
-      final city = entry.key;
-      return [
-        _AreaItem(city: city, area: city, isCity: true),
-        ...entry.value.map((a) => _AreaItem(city: city, area: a, isCity: false)),
-      ];
-    }).toList();
-    _filtered = List.from(_all);
     _searchCtrl.addListener(_onSearch);
   }
 
   void _onSearch() {
-    final q = _searchCtrl.text.toLowerCase().trim();
-    setState(() {
-      _filtered = q.isEmpty
-          ? List.from(_all)
-          : _all.where((item) =>
-              item.area.toLowerCase().contains(q) ||
-              item.city.toLowerCase().contains(q)).toList();
+    final q = _searchCtrl.text.trim();
+    _debounce?.cancel();
+    if (q.length < 2) {
+      setState(() { _suggestions = []; _loading = false; });
+      return;
+    }
+    setState(() => _loading = true);
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        final url = Uri.parse(
+          '${ApiService.baseUrl}/places/autocomplete?input=${Uri.encodeComponent(q)}',
+        );
+        final resp = await http.get(url);
+        if (!mounted) return;
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+          final preds = (data['predictions'] as List? ?? []);
+          setState(() {
+            _suggestions = preds.map((p) {
+              final desc = p['description'] as String;
+              final parts = desc.split(', ');
+              return {
+                'main': parts.first,
+                'sub': parts.length > 1 ? parts.skip(1).join(', ') : '',
+                'full': desc,
+              };
+            }).toList();
+            _loading = false;
+          });
+        } else {
+          setState(() { _suggestions = []; _loading = false; });
+        }
+      } catch (_) {
+        if (mounted) setState(() { _suggestions = []; _loading = false; });
+      }
     });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final q = _searchCtrl.text.trim();
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
@@ -1665,15 +1898,23 @@ class _AreaSearchSheetState extends State<_AreaSearchSheet> {
               autofocus: true,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'City ya area likho... (Lahore, Gulberg, DHA...)',
+                hintText: 'Pakistan ka koi bhi shehar ya area likho...',
                 hintStyle: const TextStyle(fontSize: 13, color: AppTheme.textGrey),
                 prefixIcon: const Icon(Icons.search, size: 18, color: AppTheme.primary),
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        onPressed: () => _searchCtrl.clear(),
+                suffixIcon: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                        ),
                       )
-                    : null,
+                    : _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () => _searchCtrl.clear(),
+                          )
+                        : null,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 enabledBorder: OutlineInputBorder(
@@ -1691,68 +1932,88 @@ class _AreaSearchSheetState extends State<_AreaSearchSheet> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: _filtered.isEmpty
-                ? const Center(
-                    child: Text('Koi area nahi mila', style: TextStyle(color: AppTheme.textGrey)),
+            child: q.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.location_city_outlined, size: 48, color: Colors.grey.shade300),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Koi bhi shehar ya mohalla likho',
+                          style: TextStyle(color: AppTheme.textGrey, fontSize: 13),
+                        ),
+                        const Text(
+                          'Lahore, Gulberg, DHA, Saddar...',
+                          style: TextStyle(color: AppTheme.textGrey, fontSize: 11),
+                        ),
+                      ],
+                    ),
                   )
-                : ListView.builder(
-                    itemCount: _filtered.length,
-                    itemBuilder: (_, i) {
-                      final item = _filtered[i];
-                      final isSelected = item.area == widget.selectedArea;
-                      if (item.isCity) {
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                          child: Text(
-                            item.city,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primary,
-                              letterSpacing: 0.5,
+                : !_loading && _suggestions.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Koi nataij nahi mila',
+                              style: TextStyle(color: AppTheme.textGrey, fontSize: 13),
                             ),
-                          ),
-                        );
-                      }
-                      return ListTile(
-                        dense: true,
-                        leading: Icon(
-                          Icons.location_on_outlined,
-                          size: 16,
-                          color: isSelected ? AppTheme.primary : Colors.grey.shade400,
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.add_location_alt_outlined, size: 16),
+                              label: Text('"$q" use karo'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.primary,
+                                side: const BorderSide(color: AppTheme.primary),
+                              ),
+                              onPressed: () {
+                                widget.onSelected(q);
+                                Navigator.pop(context);
+                              },
+                            ),
+                          ],
                         ),
-                        title: Text(
-                          item.area,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                            color: isSelected ? AppTheme.primary : AppTheme.textDark,
-                          ),
-                        ),
-                        subtitle: Text(
-                          item.city,
-                          style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
-                        ),
-                        trailing: isSelected
-                            ? const Icon(Icons.check_circle, size: 16, color: AppTheme.primary)
-                            : null,
-                        onTap: () {
-                          widget.onSelected(item.area);
-                          Navigator.pop(context);
+                      )
+                    : ListView.builder(
+                        itemCount: _suggestions.length,
+                        itemBuilder: (_, i) {
+                          final s = _suggestions[i];
+                          final isSelected = s['main'] == widget.selectedArea;
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              Icons.location_on_outlined,
+                              size: 16,
+                              color: isSelected ? AppTheme.primary : Colors.grey.shade400,
+                            ),
+                            title: Text(
+                              s['main']!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                color: isSelected ? AppTheme.primary : AppTheme.textDark,
+                              ),
+                            ),
+                            subtitle: s['sub']!.isNotEmpty
+                                ? Text(
+                                    s['sub']!,
+                                    style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                                  )
+                                : null,
+                            trailing: isSelected
+                                ? const Icon(Icons.check_circle, size: 16, color: AppTheme.primary)
+                                : null,
+                            onTap: () {
+                              widget.onSelected(s['main']!);
+                              Navigator.pop(context);
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
+                      ),
           ),
         ],
       ),
     );
   }
-}
-
-class _AreaItem {
-  final String city;
-  final String area;
-  final bool isCity;
-  const _AreaItem({required this.city, required this.area, required this.isCity});
 }

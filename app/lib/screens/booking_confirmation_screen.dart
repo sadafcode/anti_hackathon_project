@@ -6,6 +6,7 @@ import '../models/pricing_model.dart';
 import '../services/booking_firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
+import '../services/api_service.dart';
 import 'booking_status_screen.dart';
 import 'provider_notification_screen.dart';
 
@@ -43,10 +44,12 @@ class _BookingConfirmationScreenState
   void initState() {
     super.initState();
 
-    // Mock: tomorrow at 10:00 AM
+    // Use datetime from confirmed intent if available, else tomorrow 10 AM
+    final intentDatetime = ApiService.lastConfirmedIntent?['datetime'] as String?;
     final now = DateTime.now();
-    _appointmentTime =
-        DateTime(now.year, now.month, now.day + 1, 10, 0, 0);
+    _appointmentTime = intentDatetime != null
+        ? (DateTime.tryParse(intentDatetime) ?? DateTime(now.year, now.month, now.day + 1, 10, 0, 0))
+        : DateTime(now.year, now.month, now.day + 1, 10, 0, 0);
     _remaining = _appointmentTime.difference(DateTime.now());
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -72,6 +75,11 @@ class _BookingConfirmationScreenState
       final serviceType = widget.provider.serviceTypes.isNotEmpty
           ? widget.provider.serviceTypes.first
           : 'service';
+      final intent = ApiService.lastConfirmedIntent;
+      final serviceDetails = intent?['service_details'] as String?;
+      final fullAddress = intent?['full_address'] as String?;
+      final houseNumber = intent?['house_number'] as String?;
+      final street = intent?['street'] as String?;
       // Use atomic creation to prevent double booking
       final result = await BookingFirestoreService.createBookingAtomically(
         bookingId: widget.bookingId,
@@ -81,6 +89,10 @@ class _BookingConfirmationScreenState
         area: widget.provider.area,
         amount: widget.pricing.total,
         datetime: _appointmentTime.toIso8601String(),
+        serviceDetails: serviceDetails,
+        fullAddress: fullAddress,
+        houseNumber: houseNumber,
+        street: street,
       );
       if (result == null) {
         // Slot was taken by another client between discovery and booking
@@ -311,13 +323,13 @@ class _BookingConfirmationScreenState
                 _receiptRow(
                   Icons.access_time_outlined,
                   'Time',
-                  '10:00 AM',
+                  '${_appointmentTime.hour.toString().padLeft(2, '0')}:${_appointmentTime.minute.toString().padLeft(2, '0')}',
                 ),
                 _dottedDivider(),
                 _receiptRow(
                   Icons.location_on_outlined,
                   'Location',
-                  'G-13, Islamabad',
+                  ApiService.lastConfirmedIntent?['full_address'] as String? ?? widget.provider.area,
                 ),
                 _dottedDivider(),
                 _receiptRow(
@@ -425,7 +437,7 @@ class _BookingConfirmationScreenState
           ),
           const SizedBox(height: 6),
           Text(
-            'Appointment: Kal, 10:00 AM',
+            'Appointment: $_appointmentDateText, ${_appointmentTime.hour.toString().padLeft(2, '0')}:${_appointmentTime.minute.toString().padLeft(2, '0')}',
             style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
           ),
         ],

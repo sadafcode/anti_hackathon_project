@@ -12,6 +12,7 @@ class Message {
   final String? serviceType;
   final String? locationHint;
   final String? requestedDatetime; // ISO string for availability day check
+  final String? serviceDetails;    // What the client described (for scope card)
   final PricingModel? pricing;
   final String? contractId;
 
@@ -24,6 +25,7 @@ class Message {
     this.serviceType,
     this.locationHint,
     this.requestedDatetime,
+    this.serviceDetails,
     this.pricing,
     this.contractId,
   }) : timestamp = timestamp ?? DateTime.now();
@@ -54,12 +56,13 @@ class Message {
         provider: topProvider,
       );
 
-  factory Message.providerCard(ProviderModel provider, {String? requestedDatetime}) => Message(
+  factory Message.providerCard(ProviderModel provider, {String? requestedDatetime, String? serviceDetails}) => Message(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         text: '',
         type: MessageType.providerCard,
         provider: provider,
         requestedDatetime: requestedDatetime,
+        serviceDetails: serviceDetails,
       );
 
   factory Message.contract({

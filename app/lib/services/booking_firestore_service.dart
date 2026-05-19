@@ -20,6 +20,10 @@ class BookingFirestoreService {
     required String area,
     required int amount,
     required String datetime,
+    String? serviceDetails,
+    String? fullAddress,
+    String? houseNumber,
+    String? street,
   }) async {
     final docRef = _db.collection(_bookingsCol).doc(bookingId);
 
@@ -56,6 +60,10 @@ class BookingFirestoreService {
           'amount': amount,
           'datetime': datetime,
           'datetimeIso': datetime,
+          'serviceDetails': serviceDetails,
+          'fullAddress': fullAddress,
+          'houseNumber': houseNumber,
+          'street': street,
           'status': 'pending',
           'declineReason': null,
           'createdAt': FieldValue.serverTimestamp(),

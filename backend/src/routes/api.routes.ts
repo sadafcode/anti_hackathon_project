@@ -140,7 +140,7 @@ function toFlutterChatResponse(output: z.infer<typeof ChatOutputSchema>, rawMess
         : null,
       budget: { sensitivity: output.collected_info.budget_sensitive ? 'high' : 'medium', max_amount: null, raw_text: null },
       complexity_hints: [],
-      additional_details: null,
+      additional_details: output.collected_info.service_details,
       job_complexity: output.collected_info.job_complexity,
     },
   };
@@ -154,10 +154,19 @@ function toFlutterChatResponse(output: z.infer<typeof ChatOutputSchema>, rawMess
         follow_up_question: null,
         confirmed_intent: {
           service_type: output.collected_info.service_type!,
+          service_details: output.collected_info.service_details,
           location: {
             area: output.collected_info.area!,
             city: output.collected_info.city || 'Islamabad',
           },
+          full_address: [
+            output.collected_info.house_number,
+            output.collected_info.street,
+            output.collected_info.area,
+            output.collected_info.city || 'Islamabad',
+          ].filter(Boolean).join(', '),
+          house_number: output.collected_info.house_number,
+          street: output.collected_info.street,
           datetime: output.collected_info.datetime_iso!,
           urgency: output.collected_info.urgency || 'medium',
           budget_sensitive: output.collected_info.budget_sensitive,
@@ -208,7 +217,15 @@ router.post('/chat', async (req, res) => {
       roman_urdu_mixed: 'ROMAN URDU MIXED',
       urdu_mixed: 'URDU MIXED',
     };
-    const promptWithLang = `[LANGUAGE OF THIS USER MESSAGE: ${langLabel[detectedLang]} — REPLY IN ${langLabel[detectedLang]} ONLY]\n${message}`;
+    const now = new Date();
+    const todayISO = now.toISOString().split('T')[0]; // e.g. "2026-05-19"
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const todayDayName = days[now.getDay()]; // e.g. "Tuesday"
+    const tomorrowDate = new Date(now); tomorrowDate.setDate(now.getDate() + 1);
+    const tomorrowISO = tomorrowDate.toISOString().split('T')[0];
+    const tomorrowDayName = days[tomorrowDate.getDay()];
+
+    const promptWithLang = `[LANGUAGE: ${langLabel[detectedLang]} — REPLY IN ${langLabel[detectedLang]} ONLY]\n[TODAY: ${todayISO} (${todayDayName}) | KAL/TOMORROW: ${tomorrowISO} (${tomorrowDayName})]\n${message}`;
 
     const session = sessionService.getOrCreate(session_id);
     const result = await run(orchestratorAgent, promptWithLang, { session, maxTurns: 30 });
@@ -265,10 +282,24 @@ function areasMatch(providerArea: string, requestedArea: string): boolean {
   const pa = providerArea.toLowerCase().trim();
   const ra = requestedArea.toLowerCase().trim();
   if (pa === ra) return true;
+  if (pa.includes(ra) || ra.includes(pa)) return true;
   const pc = resolveCity(pa);
   const rc = resolveCity(ra);
   if (pc && rc && pc === rc) return true;
-  return (NEIGHBORS[ra] || []).includes(pa);
+  if ((NEIGHBORS[ra] || []).includes(pa)) return true;
+
+  // Word-level fuzzy match — handles typos like "shafaisal" matching "shah faisal"
+  const stopWords = new Set(['colony','town','sector','block','area','phase','road','street','village','mohalla','market','chowk','islamabad','lahore','karachi','rawalpindi','peshawar','quetta','faisalabad','multan','gujranwala','sialkot','hyderabad','abbottabad']);
+  const sigWords = (s: string) => s.split(/\s+/).filter(w => w.length >= 4 && !stopWords.has(w));
+  const qWords = sigWords(ra);
+  const pWords = sigWords(pa);
+  if (qWords.length > 0 && pWords.length > 0) {
+    if (pc && rc && pc !== rc) return false;
+    const match = qWords.some(qw => pWords.some(pw => qw.includes(pw) || pw.includes(qw)));
+    if (match) return true;
+  }
+
+  return false;
 }
 
 function getNoProvidersMessage(serviceType: string, lang: string): string {
@@ -505,26 +536,35 @@ router.post('/discovery', async (req, res) => {
             {
               role: 'system',
               content: `You are the Provider Discovery Agent for Antigravity — Pakistan's home services platform.
-Write a short, engaging, and professional ranking reason for each recommended service provider.
+Write a SHORT (2-3 sentences max), unique, and honest ranking reason for EACH provider explaining WHY they were selected.
+
 LANGUAGE RULE:
-- If language is "english", write exactly in English.
-- If language is "urdu", write exactly in Urdu script (اردو).
-- If language is "roman_urdu" or "roman_urdu_mixed" or "urdu_mixed", write exactly in Roman Urdu (using Latin alphabet, e.g. "Ali G-11 mein hai aur customer bhi G-11 mein...").
-- NEVER mix languages.
+- "english" → English only
+- "urdu" → Urdu script only
+- "roman_urdu" / "roman_urdu_mixed" / "urdu_mixed" → Roman Urdu only (Latin alphabet)
+- NEVER mix languages
 
-CRITICAL RULE for unavailable providers (availability score is 0): The ranking_reason MUST start with: "[DayName] ko available nahi —" then explain why they're still recommended as the best next alternative.
+REASON RULES — each reason must be DIFFERENT and based on that provider's actual data:
+- If only provider in customer's area → mention that (e.g. "Is ilaqe mein sirf yahi provider registered hai")
+- If new profile (0 reviews) but good experience → say so honestly (e.g. "Nayi profile hai lekin X saal ka tajurba hai")
+- If high rated → mention rating and reviews
+- If prices are high but no alternative → acknowledge it (e.g. "Rates thodi zyada hain lekin is area mein available hain")
+- If blue tick verified → mention trust factor
+- If NOT available on requested day → start with "[DayName] ko available nahi —" then explain why still recommended
+- NEVER give the same reason to two providers
 
-Format the output strictly as a JSON object:
+Format strictly as JSON:
 {
   "reasons": {
-    "PRV-ID": "ranking reason text"
+    "PRV-ID": "reason text"
   }
 }`
             },
             {
               role: 'user',
-              content: `Generate reasons for these providers in language "${lang}" for requested day "${dayName}":
-${JSON.stringify(ranked_providers.map(p => ({
+              content: `Generate unique reasons for these ${ranked_providers.length} providers in language "${lang}" for requested day "${dayName}". Total providers found in area: ${ranked_providers.length}.
+
+${JSON.stringify(ranked_providers.map((p, idx) => ({
   id: p.id,
   name: p.name,
   area: p.area,
@@ -534,8 +574,11 @@ ${JSON.stringify(ranked_providers.map(p => ({
   on_time_score: p.on_time_score,
   blue_tick: p.blue_tick,
   calculated_score: p.calculated_score,
-  is_available: p.score_breakdown.availability > 0,
+  is_available_today: p.score_breakdown.availability > 0,
   distance_km: p.distance_km,
+  rank_position: idx + 1,
+  is_only_provider: ranked_providers.length === 1,
+  is_new_profile: p.total_reviews === 0,
 })), null, 2)}`
             }
           ],
@@ -708,95 +751,57 @@ router.post('/contract/accept', async (req, res) => {
       return res.status(400).json({ error: 'contract_id and party are required' });
     }
 
-    const db = getFirestoreDb();
-    const contractRef = db.collection('contracts').doc(contract_id);
-    const doc = await contractRef.get();
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Contract not found' });
-    }
-
-    const contract = doc.data() as any;
-
     if (party === 'user') {
-      await contractRef.update({
-        user_accepted: true,
-      });
+      // Use data from request body (Flutter client has all the data).
+      // Firestore Admin is optional — fall back gracefully if credentials are missing.
+      const providerId: string = req.body.provider_id || 'unknown';
+      const serviceType: string = req.body.service_type || 'service';
+      const totalAmount: number = req.body.amount || 0;
+      const bookingDatetime: string = req.body.datetime || new Date().toISOString();
+      const clientSession: string = req.body.session_id || '';
 
-      // Simulate provider accepting after 2.5 seconds
-      setTimeout(async () => {
-        try {
-          const freshDoc = await contractRef.get();
-          if (!freshDoc.exists) return;
-          const freshContract = freshDoc.data() as any;
-          if (freshContract.status === 'locked') return; // already locked
-
-          const record = bookingStore.createBooking({
-            provider_id: freshContract.provider_id,
-            service_type: freshContract.service || 'service',
-            datetime: freshContract.datetime || new Date().toISOString(),
-            total_price: freshContract.total,
-            intent: freshContract.intent || {},
-            all_ranked_providers: [],
-            is_returning_user: false,
-            client_session_id: freshContract.user_id,
-          });
-
-          await contractRef.update({
-            provider_accepted: true,
-            status: 'locked',
-            booking_id: record.id,
-          });
-
-          await db.collection('bookings').doc(record.id).set({
-            booking_id: record.id,
-            provider_id: freshContract.provider_id,
-            provider_name: freshContract.provider_name || 'Provider',
-            service_type: freshContract.service || 'service',
-            area: freshContract.intent?.location?.area || 'Islamabad',
-            amount: freshContract.total,
-            datetime: freshContract.datetime || new Date().toISOString(),
-            status: 'pending',
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          console.log(`[Contract] Provider automatically accepted contract ${contract_id}. Booking ${record.id} created.`);
-        } catch (timerErr: any) {
-          console.error('[Contract] Timer automatic accept error:', timerErr.message);
-        }
-      }, 2500);
-
-      return res.json({ success: true, message: 'User accepted. Provider timer started.' });
-    } else if (party === 'provider') {
-      // If manually accepted by provider
       const record = bookingStore.createBooking({
-        provider_id: contract.provider_id,
-        service_type: contract.service || 'service',
-        datetime: contract.datetime || new Date().toISOString(),
-        total_price: contract.total,
-        intent: contract.intent || {},
+        provider_id: providerId,
+        service_type: serviceType,
+        datetime: bookingDatetime,
+        total_price: totalAmount,
+        intent: req.body.intent || {},
         all_ranked_providers: [],
         is_returning_user: false,
-        client_session_id: contract.user_id,
+        client_session_id: clientSession,
       });
 
-      await contractRef.update({
-        provider_accepted: true,
-        status: 'locked',
-        booking_id: record.id,
+      // Best-effort: update the Firestore contract document if Admin SDK is available
+      try {
+        const db = getFirestoreDb();
+        const contractRef = db.collection('contracts').doc(contract_id);
+        await contractRef.update({ user_accepted: true, booking_id: record.id, status: 'locked' });
+      } catch (_) {
+        // No service account key — client writes Firestore booking directly
+      }
+
+      console.log(`[Contract] Booking ${record.id} created for provider ${providerId}`);
+      return res.json({ success: true, booking_id: record.id });
+    } else if (party === 'provider') {
+      const providerId: string = req.body.provider_id || 'unknown';
+      const record = bookingStore.createBooking({
+        provider_id: providerId,
+        service_type: req.body.service_type || 'service',
+        datetime: req.body.datetime || new Date().toISOString(),
+        total_price: req.body.amount || 0,
+        intent: req.body.intent || {},
+        all_ranked_providers: [],
+        is_returning_user: false,
+        client_session_id: req.body.session_id || '',
       });
 
-      await db.collection('bookings').doc(record.id).set({
-        booking_id: record.id,
-        provider_id: contract.provider_id,
-        provider_name: contract.provider_name || 'Provider',
-        service_type: contract.service || 'service',
-        area: contract.intent?.location?.area || 'Islamabad',
-        amount: contract.total,
-        datetime: contract.datetime || new Date().toISOString(),
-        status: 'pending',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      try {
+        const db = getFirestoreDb();
+        const contractRef = db.collection('contracts').doc(contract_id);
+        await contractRef.update({ provider_accepted: true, status: 'locked', booking_id: record.id });
+      } catch (_) {}
 
-      return res.json({ success: true, message: 'Provider accepted. Booking created.', booking_id: record.id });
+      return res.json({ success: true, booking_id: record.id });
     } else {
       return res.status(400).json({ error: 'Invalid party type' });
     }
@@ -1117,6 +1122,26 @@ Follow the rules and evaluation criteria strictly. Do not hallucinate any price 
   }
 });
 
+const DAY_NORMALIZE: Record<string, string> = {
+  'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday',
+  'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday', 'Sun': 'sunday',
+  'monday': 'monday', 'tuesday': 'tuesday', 'wednesday': 'wednesday',
+  'thursday': 'thursday', 'friday': 'friday', 'saturday': 'saturday', 'sunday': 'sunday',
+};
+
+function normalizeAvailability(avail: Record<string, string[]> | null): Record<string, string[]> {
+  if (!avail) return {
+    monday: ['available'], tuesday: ['available'], wednesday: ['available'],
+    thursday: ['available'], friday: ['available'], saturday: ['available'], sunday: ['available'],
+  };
+  const result: Record<string, string[]> = {};
+  for (const [key, slots] of Object.entries(avail)) {
+    const normalKey = DAY_NORMALIZE[key] || key.toLowerCase();
+    result[normalKey] = Array.isArray(slots) && slots.length > 0 ? slots : [];
+  }
+  return result;
+}
+
 // ─── 7. REGISTER PROVIDER ────────────────────────────────────────────────────
 router.post('/provider/register', async (req, res) => {
   try {
@@ -1145,19 +1170,11 @@ router.post('/provider/register', async (req, res) => {
       on_time_score: 100, cancellation_rate: 0, capacity_today: 3,
       risk_score: 'low', strikes: 0, user_preference_score: 0,
       registered_at: new Date().toISOString(),
-      availability: availability || {
-        monday: ['09:00','11:00','14:00','16:00'],
-        tuesday: ['09:00','11:00','14:00','16:00'],
-        wednesday: ['09:00','11:00','14:00','16:00'],
-        thursday: ['09:00','11:00','14:00','16:00'],
-        friday: ['09:00','11:00','14:00'],
-        saturday: ['10:00','12:00'],
-        sunday: [],
-      },
+      availability: normalizeAvailability(availability),
     };
 
     const dataPath = path.resolve(__dirname, '../../data/providers.json');
-    const providers = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+    const providers = JSON.parse(fs.readFileSync(dataPath, 'utf-8').replace(/^﻿/, ''));
     providers.push(newProvider);
     fs.writeFileSync(dataPath, JSON.stringify(providers, null, 2));
 
@@ -1301,7 +1318,7 @@ router.post('/providers/:id/rate', async (req, res) => {
     }
 
     const dataPath = path.resolve(__dirname, '../../data/providers.json');
-    const providers = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+    const providers = JSON.parse(fs.readFileSync(dataPath, 'utf-8').replace(/^﻿/, ''));
     const idx = providers.findIndex((p: any) => p.id === providerId);
     if (idx === -1) return res.status(404).json({ error: 'Provider not found' });
 

@@ -7,7 +7,8 @@ const DATA_PATH = path.resolve(__dirname, '../../data/providers.json');
 
 function readProviders(): any[] {
   try {
-    return JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
+    const raw = fs.readFileSync(DATA_PATH, 'utf-8').replace(/^﻿/, '');
+    return JSON.parse(raw);
   } catch {
     return [];
   }
@@ -40,6 +41,8 @@ function resolveCity(area: string): string | null {
   const a = area.toLowerCase().trim();
   for (const [city, areas] of Object.entries(CITY_AREAS)) {
     if (city === a || areas.includes(a)) return city;
+    if (a.includes(city)) return city;
+    if (areas.some(known => a.includes(known) || known.includes(a))) return city;
   }
   return null;
 }
@@ -48,10 +51,26 @@ function areasMatch(providerArea: string, requestedArea: string): boolean {
   const pa = providerArea.toLowerCase().trim();
   const ra = requestedArea.toLowerCase().trim();
   if (pa === ra) return true;
+  if (pa.includes(ra) || ra.includes(pa)) return true;
   const pc = resolveCity(pa);
   const rc = resolveCity(ra);
   if (pc && rc && pc === rc) return true;
-  return (NEIGHBORS[ra] || []).includes(pa);
+  if ((NEIGHBORS[ra] || []).includes(pa)) return true;
+
+  // Word-level fuzzy match — handles typos like "shafaisal" matching "shah faisal"
+  // A significant word from either side appears as substring in a word from the other side.
+  const stopWords = new Set(['colony','town','sector','block','area','phase','road','street','village','mohalla','market','chowk','islamabad','lahore','karachi','rawalpindi','peshawar','quetta','faisalabad','multan','gujranwala','sialkot','hyderabad','abbottabad']);
+  const sigWords = (s: string) => s.split(/\s+/).filter(w => w.length >= 4 && !stopWords.has(w));
+  const qWords = sigWords(ra);
+  const pWords = sigWords(pa);
+  if (qWords.length > 0 && pWords.length > 0) {
+    // Don't fuzzy-match across known different cities (e.g. Bahria Town Islamabad ≠ Bahria Town Rawalpindi)
+    if (pc && rc && pc !== rc) return false;
+    const match = qWords.some(qw => pWords.some(pw => qw.includes(pw) || pw.includes(qw)));
+    if (match) return true;
+  }
+
+  return false;
 }
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -124,20 +143,36 @@ export const searchProviders = tool({
         }
       }
 
+      // Always include area-name matched providers (e.g. providers with no GPS coordinates
+      // but registered in the requested area). Merge without duplicates.
+      const areaMatched = providersWithDistance.filter((p: any) =>
+        areasMatch(p.area, area) && isAvailable(p)
+      );
+
       if (selectedRadius !== null) {
         radiusUsed = selectedRadius;
+        // Merge area-matched providers that aren't already in the radius results
+        const existingIds = new Set(available.map((p: any) => p.id));
+        for (const p of areaMatched) {
+          if (!existingIds.has(p.id)) available.push(p);
+        }
       } else {
-        // Fallback to all city providers
-        radiusUsed = 'city';
-        const city = resolveCity(area);
-        if (city) {
-          const inCity = providersWithDistance.filter((p: any) => resolveCity(p.area) === city);
-          available = inCity.filter(isAvailable);
-          nearbyCount = inCity.length;
+        // No GPS results — fall back to area-name match, then city, then all
+        if (areaMatched.length > 0) {
+          radiusUsed = 'area_name';
+          available = areaMatched;
+          nearbyCount = areaMatched.length;
         } else {
-          // If no city found, fall back to all providers of this service type
-          available = providersWithDistance.filter(isAvailable);
-          nearbyCount = providersWithDistance.length;
+          radiusUsed = 'city';
+          const city = resolveCity(area);
+          if (city) {
+            const inCity = providersWithDistance.filter((p: any) => resolveCity(p.area) === city);
+            available = inCity.filter(isAvailable);
+            nearbyCount = inCity.length;
+          } else {
+            available = providersWithDistance.filter(isAvailable);
+            nearbyCount = providersWithDistance.length;
+          }
         }
       }
     } else {

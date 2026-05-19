@@ -1587,5 +1587,143 @@
       ],
       "sunday": []
     }
+  },
+  {
+    "id": "PRV-BGX5PI52",
+    "name": "Bilal",
+    "area": "karachi shah faisal colony",
+    "service_types": [
+      "plumber",
+      "driver"
+    ],
+    "hourly_rate": 5000,
+    "rate_basic": 5000,
+    "rate_intermediate": 6000,
+    "rate_complex": 8000,
+    "experience_years": 6,
+    "blue_tick": false,
+    "rating": 0,
+    "total_reviews": 0,
+    "review_sentiment": "unrated",
+    "on_time_score": 100,
+    "cancellation_rate": 0,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "strikes": 0,
+    "user_preference_score": 0,
+    "registered_at": "2026-05-19T04:25:07.733Z",
+    "availability": {
+      "thursday": [
+        "8amâ€“12pm",
+        "12pmâ€“4pm",
+        "4pmâ€“8pm"
+      ],
+      "tuesday": [
+        "Pura Din"
+      ],
+      "saturday": [
+        "Pura Din"
+      ],
+      "wednesday": [
+        "Pura Din"
+      ],
+      "friday": [
+        "Pura Din"
+      ],
+      "monday": [
+        "Pura Din"
+      ]
+    }
+  },
+  {
+    "id": "PRV-MJ1UU688",
+    "name": "Talha",
+    "area": "lahore",
+    "service_types": [
+      "electrician",
+      "driver"
+    ],
+    "hourly_rate": 100,
+    "rate_basic": 100,
+    "rate_intermediate": 200,
+    "rate_complex": 300,
+    "experience_years": 2,
+    "blue_tick": false,
+    "rating": 0,
+    "total_reviews": 0,
+    "review_sentiment": "unrated",
+    "on_time_score": 100,
+    "cancellation_rate": 0,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "strikes": 0,
+    "user_preference_score": 0,
+    "registered_at": "2026-05-19T04:39:18.666Z",
+    "availability": {
+      "thursday": [
+        "8amâ€“12pm",
+        "12pmâ€“4pm",
+        "4pmâ€“8pm"
+      ],
+      "tuesday": [
+        "Pura Din"
+      ],
+      "saturday": [
+        "Pura Din"
+      ],
+      "wednesday": [
+        "Pura Din"
+      ],
+      "friday": [
+        "Pura Din"
+      ],
+      "monday": [
+        "Pura Din"
+      ]
+    }
+  },
+  {
+    "id": "PRV-SPYUVBPK",
+    "name": "Rabeel",
+    "area": "Gulshan - e - Iqbal",
+    "service_types": [
+      "carpenter"
+    ],
+    "hourly_rate": 100,
+    "rate_basic": 100,
+    "rate_intermediate": 200,
+    "rate_complex": 300,
+    "experience_years": 4,
+    "blue_tick": false,
+    "rating": 0,
+    "total_reviews": 0,
+    "review_sentiment": "unrated",
+    "on_time_score": 90,
+    "cancellation_rate": 1,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "strikes": 0,
+    "user_preference_score": 0,
+    "registered_at": "2026-05-19T08:30:51.907Z",
+    "availability": {
+      "monday": [
+        "Pura Din"
+      ],
+      "tuesday": [
+        "Pura Din"
+      ],
+      "wednesday": [
+        "Pura Din"
+      ],
+      "thursday": [
+        "Pura Din"
+      ],
+      "friday": [
+        "Pura Din"
+      ],
+      "saturday": [
+        "Pura Din"
+      ]
+    }
   }
 ]

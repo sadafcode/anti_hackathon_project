@@ -5,12 +5,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/provider_model.dart';
 import 'agent_trace_screen.dart';
+import 'service_tracking_screen.dart';
 import '../models/pricing_model.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
-enum _Phase { waiting, confirmed, declined, rescheduling, rescheduled, noProvider }
+enum _Phase { waiting, confirmed, declined }
 
 class BookingWaitingScreen extends StatefulWidget {
   final String bookingId;
@@ -37,9 +38,6 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
   _Phase _phase = _Phase.waiting;
 
   String? _declineReason;
-  String? _newBookingId;
-  ProviderModel? _newProvider;
-  PricingModel? _newPricing;
 
   late AnimationController _pulseController;
   late Animation<double> _pulse;
@@ -70,15 +68,6 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     );
 
     _listenToBooking();
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && _phase == _Phase.waiting) {
-        // Mock: provider accepted after 5 seconds
-        _pulseController.stop();
-        _successController.forward();
-        setState(() => _phase = _Phase.confirmed);
-      }
-    });
   }
 
   void _listenToBooking() {
@@ -97,76 +86,35 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
           _phase == _Phase.waiting) {
         _declineReason = data['declineReason'] as String?;
         setState(() => _phase = _Phase.declined);
-        // Auto-find next provider after 1.5 seconds
-        Future.delayed(const Duration(milliseconds: 1500), _autoReschedule);
+        Future.delayed(const Duration(milliseconds: 1200), _handleDecline);
       }
     });
   }
 
-  Future<void> _autoReschedule() async {
+  Future<void> _handleDecline() async {
     if (!mounted) return;
-    setState(() => _phase = _Phase.rescheduling);
 
     final allProviders = ApiService.lastDiscoveredProviders;
-    final intent = ApiService.lastConfirmedIntent;
-
-    // Find next provider (skip the one that declined)
     final nextProviderJson = allProviders.firstWhere(
       (p) => p['id'] != widget.provider.id,
-      orElse: () => {},
+      orElse: () => <String, dynamic>{},
     );
 
-    if (nextProviderJson.isEmpty || intent == null) {
-      if (mounted) setState(() => _phase = _Phase.noProvider);
-      return;
-    }
-
-    try {
-      final nextProvider = ProviderModel.fromJson(nextProviderJson);
-
-      // Get pricing for new provider
-      final pricingJson =
-          await ApiService.getPricing(nextProviderJson, intent, false);
-      final newPricing = PricingModel.fromJson(pricingJson);
-
-      // Create booking for new provider
-      final req = {
-        'provider': nextProviderJson,
-        'intent': intent,
-        'pricing': {'base_rate': newPricing.baseRate, 'total': newPricing.total},
-        'mock_action': 'accept',
+    if (nextProviderJson.isNotEmpty) {
+      ApiService.pendingPostDeclineAction = {
+        'type': 'show_next',
+        'declined_name': widget.provider.name,
+        'next_provider_json': nextProviderJson,
       };
-      final bookingResp = await ApiService.createBooking(req);
-      final newBookingId = bookingResp['booking_id'] as String? ?? '';
-      final newProviderId = bookingResp['provider_id'] as String? ?? '';
-
-      if (newBookingId.isNotEmpty && newProviderId.isNotEmpty) {
-        await BookingFirestoreService.createBooking(
-          bookingId: newBookingId,
-          providerId: newProviderId,
-          providerName: nextProvider.name,
-          serviceType: nextProvider.serviceTypes.isNotEmpty
-              ? nextProvider.serviceTypes.first
-              : 'service',
-          area: nextProvider.area,
-          amount: newPricing.total,
-          datetime: DateTime.now()
-              .add(const Duration(days: 1))
-              .toIso8601String(),
-        );
-      }
-
-      if (mounted) {
-        setState(() {
-          _newProvider = nextProvider;
-          _newPricing = newPricing;
-          _newBookingId = newBookingId;
-          _phase = _Phase.rescheduled;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _phase = _Phase.noProvider);
+    } else {
+      ApiService.pendingPostDeclineAction = {
+        'type': 'no_provider',
+        'declined_name': widget.provider.name,
+      };
     }
+
+    ApiService.triggerReturnToChat();
+    if (mounted) Navigator.popUntil(context, (r) => r.isFirst);
   }
 
   @override
@@ -180,15 +128,12 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _phase == _Phase.confirmed ||
-          _phase == _Phase.rescheduled ||
-          _phase == _Phase.noProvider,
+      canPop: _phase == _Phase.confirmed,
       child: Scaffold(
         backgroundColor: AppTheme.background,
         appBar: AppBar(
           title: Text(_appBarTitle),
-          automaticallyImplyLeading: _phase != _Phase.waiting &&
-              _phase != _Phase.rescheduling,
+          automaticallyImplyLeading: _phase != _Phase.waiting,
           actions: [
             IconButton(
               tooltip: 'Agent Trace',
@@ -208,38 +153,17 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     );
   }
 
-  String get _appBarTitle {
-    switch (_phase) {
-      case _Phase.waiting:
-      case _Phase.rescheduling:
-        return 'Request Bheji Ja Rahi Hai';
-      case _Phase.confirmed:
-        return 'Booking Confirm!';
-      case _Phase.declined:
-        return 'Provider Busy';
-      case _Phase.rescheduled:
-        return 'Naya Provider Mila!';
-      case _Phase.noProvider:
-        return 'Koi Provider Nahi';
-    }
-  }
+  String get _appBarTitle => switch (_phase) {
+    _Phase.waiting => 'Request Bheji Ja Rahi Hai',
+    _Phase.confirmed => 'Booking Confirm!',
+    _Phase.declined => 'Provider Busy — Wapas Ja Raha Hun',
+  };
 
-  Widget _buildBody() {
-    switch (_phase) {
-      case _Phase.waiting:
-        return _buildWaiting();
-      case _Phase.confirmed:
-        return _buildConfirmed();
-      case _Phase.declined:
-        return _buildDeclined();
-      case _Phase.rescheduling:
-        return _buildRescheduling();
-      case _Phase.rescheduled:
-        return _buildRescheduled();
-      case _Phase.noProvider:
-        return _buildNoProvider();
-    }
-  }
+  Widget _buildBody() => switch (_phase) {
+    _Phase.waiting => _buildWaiting(),
+    _Phase.confirmed => _buildConfirmed(),
+    _Phase.declined => _buildDeclined(),
+  };
 
   // ─────────────────────────── WAITING ───────────────────────────
   Widget _buildWaiting() {
@@ -380,20 +304,39 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
-              icon: const Icon(Icons.home_outlined, color: Colors.white),
-              label: const Text('Home Jao',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700)),
+              onPressed: () => Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ServiceTrackingScreen(
+                    provider: widget.provider,
+                    bookingId: widget.bookingId,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.track_changes_outlined, color: Colors.white, size: 20),
+              label: const Text(
+                'Kaam Track Karo',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: 0,
               ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: Colors.grey.shade300),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('Home Jao', style: TextStyle(color: AppTheme.textGrey)),
             ),
           ),
         ],
@@ -457,206 +400,6 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     );
   }
 
-  // ─────────────────────────── RESCHEDULING ───────────────────────────
-  Widget _buildRescheduling() {
-    return Center(
-      key: const ValueKey('rescheduling'),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ScaleTransition(
-              scale: _pulse,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryLight,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.search, size: 40, color: AppTheme.primary),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Doosra Provider Dhundh Raha Hun',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textDark),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Apki rating aur area ke hisaab se best available provider select kar raha hun...',
-              style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 28),
-            const SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────── RESCHEDULED ───────────────────────────
-  Widget _buildRescheduled() {
-    final np = _newProvider!;
-    final np2 = _newPricing!;
-    return SingleChildScrollView(
-      key: const ValueKey('rescheduled'),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade600,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Column(
-              children: [
-                Icon(Icons.auto_awesome, color: Colors.white, size: 48),
-                SizedBox(height: 10),
-                Text(
-                  'Naya Provider Mila!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Apke request par automatically naya provider assign kiya gaya',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _bookingDetailsCard(
-            provider: np,
-            bookingId: _newBookingId ?? '',
-            pricing: np2,
-          ),
-          const SizedBox(height: 16),
-          _infoTile(
-            Icons.info_outline,
-            'Pehle provider (${widget.provider.name}) ne apni majboori ki wajah se decline kiya. Yeh naya assignment automatic tha — koi extra cost nahi.',
-            Colors.blue.shade600,
-            Colors.blue.shade50,
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () =>
-                      Navigator.popUntil(context, (r) => r.isFirst),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text('Home',
-                      style: TextStyle(color: AppTheme.textGrey)),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => BookingWaitingScreen(
-                          bookingId: _newBookingId!,
-                          providerId: np.id,
-                          provider: np,
-                          pricing: np2,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.live_tv_outlined,
-                      color: Colors.white, size: 16),
-                  label: const Text('New Booking Track Karo',
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    elevation: 0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────── NO PROVIDER ───────────────────────────
-  Widget _buildNoProvider() {
-    return Center(
-      key: const ValueKey('noprovider'),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 20),
-            const Text(
-              'Is Waqt Koi Provider Nahi',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textDark),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Sab providers is waqt busy hain. Thodi der baad dobara try karein ya alag waqt ka slot chunein.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: AppTheme.textGrey),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () =>
-                    Navigator.popUntil(context, (r) => r.isFirst),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: const Text('Wapas Chat Mein Jayen',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   // ─────────────────────────── SHARED WIDGETS ───────────────────────────
   Widget _bookingDetailsCard({

@@ -7,19 +7,28 @@ import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
 import 'booking_waiting_screen.dart';
 
-class PricingScreen extends StatelessWidget {
+class PricingScreen extends StatefulWidget {
   final ProviderModel provider;
   final PricingModel pricing;
   final String contractId;
-  final void Function(PricingModel pricing, String contractId) onContractCreated;
 
   PricingScreen({
     super.key,
     required this.provider,
     PricingModel? pricing,
     required this.contractId,
-    required this.onContractCreated,
   }) : pricing = pricing ?? PricingModel.fromProvider(provider);
+
+  @override
+  State<PricingScreen> createState() => _PricingScreenState();
+}
+
+class _PricingScreenState extends State<PricingScreen> {
+  bool _isAccepting = false;
+
+  ProviderModel get provider => widget.provider;
+  PricingModel get pricing => widget.pricing;
+  String get contractId => widget.contractId;
 
   @override
   Widget build(BuildContext context) {
@@ -406,7 +415,7 @@ class PricingScreen extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: () => _acceptPrice(context),
+                    onPressed: _isAccepting ? null : () => _acceptPrice(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,
                       shape: RoundedRectangleBorder(
@@ -414,14 +423,23 @@ class PricingScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Yeh Price Accept Karo',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: _isAccepting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Yeh Price Accept Karo',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -493,9 +511,64 @@ class PricingScreen extends StatelessWidget {
     );
   }
 
-  void _acceptPrice(BuildContext context) {
-    onContractCreated(pricing, contractId);
-    Navigator.pop(context); // Close PricingScreen
+  void _acceptPrice(BuildContext context) async {
+    if (_isAccepting) return;
+    setState(() => _isAccepting = true);
+    try {
+      final intent = ApiService.lastConfirmedIntent;
+      final response = await ApiService.acceptContract(
+        contractId,
+        'user',
+        providerId: provider.id,
+        serviceType: provider.serviceTypes.isNotEmpty ? provider.serviceTypes.first : 'service',
+        amount: pricing.total,
+        datetime: intent?['datetime'] as String?,
+        intent: intent,
+      );
+      final bookingId = response['booking_id'] as String? ?? '';
+
+      // Write booking to Firestore using client SDK (no Admin credentials needed)
+      if (bookingId.isNotEmpty) {
+        try {
+          await BookingFirestoreService.createBookingAtomically(
+            bookingId: bookingId,
+            providerId: provider.id,
+            providerName: provider.name,
+            serviceType: provider.serviceTypes.isNotEmpty ? provider.serviceTypes.first : 'service',
+            area: provider.area,
+            amount: pricing.total,
+            datetime: intent?['datetime'] as String? ??
+                DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+            serviceDetails: intent?['service_details'] as String?,
+            fullAddress: intent?['full_address'] as String?,
+            houseNumber: intent?['house_number'] as String?,
+            street: intent?['street'] as String?,
+          );
+        } catch (_) {}
+      }
+
+      if (!context.mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingWaitingScreen(
+            bookingId: bookingId,
+            providerId: provider.id,
+            provider: provider,
+            pricing: pricing,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAccepting = false);
+    }
   }
 
   void _showConflictDialog(
