@@ -160,7 +160,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   Icon(Icons.star_border, color: Colors.white70, size: 16),
                   SizedBox(width: 6),
                   Text(
-                    'Nayi registration — abhi koi review nahi',
+                    'New registration — no reviews yet',
                     style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ],
@@ -276,7 +276,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                 final ts = d['createdAt'] as Timestamp?;
                 final date = ts != null
                     ? _formatDate(ts.toDate())
-                    : 'Abhi';
+                    : 'Just now';
                 final sentiment = stars >= 4
                     ? 'positive'
                     : stars >= 3
@@ -311,12 +311,12 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
               size: 40, color: Colors.grey.shade300),
           const SizedBox(height: 10),
           const Text(
-            'Abhi koi review nahi',
+            'No reviews yet',
             style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
           ),
           const SizedBox(height: 4),
           const Text(
-            'Pehli booking ke baad review aayega',
+            'Reviews will appear after the first booking',
             style: TextStyle(fontSize: 11, color: AppTheme.textGrey),
           ),
         ],
@@ -408,20 +408,20 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   String _formatDate(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inDays == 0) return 'Aaj';
-    if (diff.inDays == 1) return 'Kal';
-    if (diff.inDays < 7) return '${diff.inDays} din pehle';
-    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} hafte pehle';
-    return '${(diff.inDays / 30).floor()} mahine pehle';
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} weeks ago';
+    return '${(diff.inDays / 30).floor()} months ago';
   }
 
   String _defaultReviewText(int stars) {
     return switch (stars) {
-      5 => 'Zabardast kaam kiya, bilkul khush hoon!',
-      4 => 'Acha kaam tha, waqt par aaye.',
-      3 => 'Theek thak tha, kuch cheezein better ho sakti theen.',
-      2 => 'Kaam se zyada khush nahi, improvement chahiye.',
-      _ => 'Kaam se mutmain nahi tha.',
+      5 => 'Excellent work, very satisfied!',
+      4 => 'Good work, arrived on time.',
+      3 => 'Decent, some things could have been better.',
+      2 => 'Not very happy with the work, needs improvement.',
+      _ => 'Not satisfied with the work.',
     };
   }
 
@@ -439,7 +439,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              'Is provider ne confirm booking ${p.strikes} baar cancel ki hai',
+              'This provider has cancelled ${p.strikes} confirmed booking(s)',
               style: TextStyle(
                   color: Colors.orange.shade900, fontSize: 13),
             ),
@@ -467,7 +467,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _statItem('${p.experienceYears} saal', 'Tajurba'),
+          _statItem('${p.experienceYears} yrs', 'Experience'),
           _statDivider(),
           _statItem('${p.onTimeScore}%', 'On-Time'),
           _statDivider(),
@@ -545,7 +545,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       children: [
         _buildTierRow(
           'Basic Service',
-          'Sada kaam (e.g. minor checkups, quick fixes, cleaning)',
+          'Simple work (e.g. minor checkups, quick fixes, cleaning)',
           'Rs. ${p.rateBasic.toInt()}',
           const Color(0xFFE2F0D9),
           const Color(0xFF385723),
@@ -553,7 +553,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         const SizedBox(height: 8),
         _buildTierRow(
           'Intermediate Service',
-          'Darmiana kaam (e.g. repairs, component replacement)',
+          'Moderate work (e.g. repairs, component replacement)',
           'Rs. ${p.rateIntermediate.toInt()}',
           const Color(0xFFFFF2CC),
           const Color(0xFF7F6000),
@@ -561,7 +561,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         const SizedBox(height: 8),
         _buildTierRow(
           'Complex Service',
-          'Mushkil kaam (e.g. master installation, major overhauls)',
+          'Complex work (e.g. master installation, major overhauls)',
           'Rs. ${p.rateComplex.toInt()}',
           const Color(0xFFFCE4D6),
           const Color(0xFFC65911),

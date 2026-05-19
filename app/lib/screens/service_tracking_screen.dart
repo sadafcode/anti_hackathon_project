@@ -29,9 +29,9 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
 
   // Checklist
   final List<_CheckItem> _checklist = [
-    _CheckItem('Waqt par pohoncha'),
-    _CheckItem('Kaam shuru ho gaya'),
-    _CheckItem('Area saaf rakhi'),
+    _CheckItem('Arrived on time'),
+    _CheckItem('Work started'),
+    _CheckItem('Area kept clean'),
     _CheckItem('Customer satisfied'),
   ];
 
@@ -104,7 +104,7 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
   }
 
   String get _etaText {
-    if (_etaSeconds <= 0) return 'Pohonch gaya!';
+    if (_etaSeconds <= 0) return 'Arrived!';
     final m = _etaSeconds ~/ 60;
     final s = (_etaSeconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
@@ -301,26 +301,26 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
           Icons.hourglass_empty_outlined
         ),
       1 => (
-          '${widget.provider.name} raaste mein hai',
+          '${widget.provider.name} is on the way',
           Colors.orange.shade700,
           Icons.directions_car_outlined
         ),
       2 => (
-          '${widget.provider.name} pohonch gaya!',
+          '${widget.provider.name} has arrived!',
           AppTheme.primary,
           Icons.where_to_vote_outlined
         ),
-      3 => ('Kaam chal raha hai...', Colors.blue.shade600, Icons.build_outlined),
-      _ => ('Kaam Complete Ho Gaya!', AppTheme.primary, Icons.check_circle_outline),
+      3 => ('Work in progress...', Colors.blue.shade600, Icons.build_outlined),
+      _ => ('Work Complete!', AppTheme.primary, Icons.check_circle_outline),
     };
   }
 
   String _subText() {
     return switch (_phase) {
-      0 => 'Provider ko notification bhej di gayi hai',
-      2 => 'Door ki ghanti bajao',
-      3 => 'Provider kaam mein laga hua hai',
-      _ => 'Feedback zaroor den — provider ki rating par asar hoga',
+      0 => 'Notification sent to provider',
+      2 => 'Ring the doorbell',
+      3 => 'Provider is working',
+      _ => 'Please leave feedback — it affects the provider\'s rating',
     };
   }
 
@@ -328,8 +328,8 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
     final steps = [
       (Icons.check_circle_outline, 'Confirmed'),
       (Icons.directions_car_outlined, 'En-Route'),
-      (Icons.where_to_vote_outlined, 'Pohoncha'),
-      (Icons.build_outlined, 'Kaam Chal Raha'),
+      (Icons.where_to_vote_outlined, 'Arrived'),
+      (Icons.build_outlined, 'In Progress'),
       (Icons.star_outline, 'Complete'),
     ];
 
@@ -455,7 +455,7 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
           ...List.generate(_checklist.length, (i) {
             final item = _checklist[i];
             return InkWell(
-              onTap: _phase >= 2 && _phase < 4
+              onTap: _phase >= 2
                   ? () => setState(() => item.checked = !item.checked)
                   : null,
               borderRadius: BorderRadius.circular(8),
@@ -509,36 +509,23 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
   }
 
   Widget _buildCompleteButton(BuildContext context) {
-    final allChecked = _checklist.every((c) => c.checked);
-
     return Column(
       children: [
-        if (!allChecked)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text(
-              'Saari cheezein check karein pehle',
-              style: TextStyle(
-                  fontSize: 12, color: Colors.orange.shade700),
-            ),
-          ),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: allChecked
-                ? () => Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => FeedbackScreen(
-                          provider: widget.provider,
-                          bookingId: widget.bookingId,
-                        ),
-                      ),
-                    )
-                : null,
+            onPressed: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => FeedbackScreen(
+                  provider: widget.provider,
+                  bookingId: widget.bookingId,
+                ),
+              ),
+            ),
             icon: const Icon(Icons.star_outline, color: Colors.white),
             label: const Text(
-              'Kaam Complete — Feedback Do',
+              'Work Complete — Leave Feedback',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 15,

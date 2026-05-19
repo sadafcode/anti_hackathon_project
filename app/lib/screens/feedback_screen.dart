@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
+import 'agent_trace_screen.dart';
 
 class FeedbackScreen extends StatefulWidget {
   final ProviderModel provider;
@@ -32,11 +33,11 @@ class _FeedbackScreenState extends State<FeedbackScreen>
   late Animation<double> _successScale;
 
   final List<String> _quickTags = [
-    'Waqt par aya',
-    'Zabardast kaam',
-    'Saaf safai ki',
-    'Seedha seedha baat ki',
-    'Sasta tha',
+    'Arrived on time',
+    'Excellent work',
+    'Kept it clean',
+    'Communicated clearly',
+    'Affordable',
   ];
   final Set<String> _selectedTags = {};
 
@@ -62,12 +63,12 @@ class _FeedbackScreenState extends State<FeedbackScreen>
 
   String get _ratingLabel {
     return switch (_selectedStars) {
-      1 => 'Bilkul theek nahi',
-      2 => 'Zyada acha nahi',
-      3 => 'Theek thak tha',
-      4 => 'Acha tha',
-      5 => 'Zabardast!',
-      _ => 'Rating dein',
+      1 => 'Very poor',
+      2 => 'Not great',
+      3 => 'Okay',
+      4 => 'Good',
+      5 => 'Excellent!',
+      _ => 'Select a rating',
     };
   }
 
@@ -89,7 +90,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
     if (_selectedStars == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Pehle rating dein'),
+          content: Text('Please rate first'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -168,6 +169,16 @@ class _FeedbackScreenState extends State<FeedbackScreen>
       appBar: AppBar(
         title: const Text('Feedback'),
         automaticallyImplyLeading: !_submitted,
+        actions: [
+          IconButton(
+            tooltip: 'Agent Trace',
+            icon: const Icon(Icons.account_tree_outlined, color: Colors.white),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AgentTraceScreen()),
+            ),
+          ),
+        ],
       ),
       body: _submitted ? _buildSuccessView(context) : _buildFormView(),
     );
@@ -263,7 +274,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
-              'Kaam Hua',
+              'Job Done',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -293,7 +304,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
       child: Column(
         children: [
           const Text(
-            'Provider ko rate karein',
+            'Rate the Provider',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -370,7 +381,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Kya acha laga? (optional)',
+            'What did you like? (optional)',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -443,7 +454,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
         style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
         decoration: InputDecoration(
           hintText:
-              'Koi baat likhni hai? (optional)\nmisaal: "Bahut jaldi kaam kiya, area saaf rakhi"',
+              'Anything to add? (optional)\ne.g. "Finished quickly, kept the area clean"',
           hintStyle:
               const TextStyle(fontSize: 13, color: AppTheme.textGrey),
           contentPadding: const EdgeInsets.all(14),
@@ -473,7 +484,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
           elevation: 0,
         ),
         child: const Text(
-          'Feedback Submit Karo',
+          'Submit Feedback',
           style: TextStyle(
             color: Colors.white,
             fontSize: 16,
@@ -505,7 +516,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
               ),
               const SizedBox(height: 24),
               const Text(
-                'Shukriya!',
+                'Thank You!',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -514,7 +525,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
               ),
               const SizedBox(height: 10),
               Text(
-                'Aapka review ${widget.provider.name} ki profile mein add ho gaya!',
+                'Your review has been added to ${widget.provider.name}\'s profile!',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 14, color: AppTheme.textGrey),
               ),
@@ -548,7 +559,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
                       Icon(Icons.star, color: Colors.amber.shade600, size: 20),
                       const SizedBox(width: 6),
                       Text(
-                        '${widget.provider.name} ki nai rating: ',
+                        '${widget.provider.name}\'s new rating: ',
                         style: const TextStyle(
                             fontSize: 13, color: AppTheme.textDark),
                       ),
@@ -582,7 +593,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Home Jao',
+                    'Go Home',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,

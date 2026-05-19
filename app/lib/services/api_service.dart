@@ -108,7 +108,9 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final json = jsonDecode(response.body);
+      _extractTraces(json);
+      return json;
     } else {
       throw Exception('Failed to accept contract: ${response.body}');
     }
@@ -172,6 +174,20 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> analyzeDispute(String disputeId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/dispute/analyze'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'dispute_id': disputeId}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to analyze dispute: ${response.body}');
+    }
+  }
+
   static Future<Map<String, dynamic>> registerProvider(Map<String, dynamic> providerData) async {
     final response = await http.post(
       Uri.parse('$baseUrl/provider/register'),
@@ -215,6 +231,33 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to respond to booking: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> rescheduleBooking({
+    required String declinedBookingId,
+    required Map<String, dynamic> nextProvider,
+    required Map<String, dynamic> intent,
+    required Map<String, dynamic> pricing,
+    required List<Map<String, dynamic>> allRankedProviders,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/booking/reschedule'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'declined_booking_id': declinedBookingId,
+        'next_provider': nextProvider,
+        'intent': intent,
+        'pricing': pricing,
+        'all_ranked_providers': allRankedProviders,
+        'client_session_id': sessionId,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to reschedule: ${response.body}');
     }
   }
 

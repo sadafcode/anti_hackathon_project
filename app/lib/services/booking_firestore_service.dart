@@ -120,7 +120,6 @@ class BookingFirestoreService {
     return _db
         .collection(_bookingsCol)
         .where('providerId', isEqualTo: providerId)
-        .where('status', isEqualTo: 'pending')
         .snapshots();
   }
 
@@ -139,33 +138,37 @@ class BookingFirestoreService {
   // ─────────────────────────────────────────────
 
   static Future<void> acceptBooking(String bookingId) async {
-    await _db.collection(_bookingsCol).doc(bookingId).update({
+    await _db.collection(_bookingsCol).doc(bookingId).set({
+      'id': bookingId,
       'status': 'confirmed',
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   static Future<void> declineBooking(String bookingId, String reason) async {
-    await _db.collection(_bookingsCol).doc(bookingId).update({
+    await _db.collection(_bookingsCol).doc(bookingId).set({
+      'id': bookingId,
       'status': 'declined',
       'declineReason': reason,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   static Future<void> cancelBooking(String bookingId) async {
-    await _db.collection(_bookingsCol).doc(bookingId).update({
+    await _db.collection(_bookingsCol).doc(bookingId).set({
+      'id': bookingId,
       'status': 'cancelled',
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   static Future<void> markCompleted(String bookingId) async {
-    await _db.collection(_bookingsCol).doc(bookingId).update({
+    await _db.collection(_bookingsCol).doc(bookingId).set({
+      'id': bookingId,
       'status': 'completed',
       'completedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   // ─────────────────────────────────────────────

@@ -41,11 +41,17 @@ export const checkBookingConflict = tool({
   }),
   execute: async ({ provider_id, requested_datetime }) => {
     const booked = bookingStore.getConfirmedDatetimes(provider_id);
+    console.log(`[TOOL check_booking_conflict] Checking conflict for provider_id: ${provider_id}, requested_datetime: ${requested_datetime}`);
+    console.log(`[TOOL check_booking_conflict] Booked slots:`, booked);
     const requested = new Date(requested_datetime);
     for (const dt of booked) {
       const diff = Math.abs(new Date(dt).getTime() - requested.getTime()) / 60000;
-      if (diff < 75) return { conflict: true, conflicting_slot: dt };
+      if (diff < 75) {
+        console.log(`[TOOL check_booking_conflict] CONFLICT FOUND with: ${dt} (diff: ${diff} mins)`);
+        return { conflict: true, conflicting_slot: dt };
+      }
     }
+    console.log(`[TOOL check_booking_conflict] NO CONFLICT FOUND.`);
     return { conflict: false, conflicting_slot: null };
   },
 });
@@ -65,6 +71,7 @@ export const createBooking = tool({
     client_session_id: z.string().nullable(),
   }),
   execute: async (params) => {
+    console.log(`[TOOL create_booking] Creating booking for provider: ${params.provider_name} (${params.provider_id}), datetime: ${params.datetime}, total: Rs.${params.total_price}`);
     let intent: any = {};
     let allRanked: any[] = [];
     try { intent = JSON.parse(params.intent); } catch {}
@@ -101,10 +108,13 @@ export const findNextFreeSlotTool = tool({
     provider_id: z.string(),
   }),
   execute: async ({ provider_json, requested_datetime, provider_id }) => {
+    console.log(`[TOOL find_next_free_slot] Finding next slot for provider_id: ${provider_id}, requested_datetime: ${requested_datetime}`);
     let provider: any = {};
     try { provider = JSON.parse(provider_json); } catch {}
     const booked = bookingStore.getConfirmedDatetimes(provider_id);
-    return findNextFreeSlot(provider, requested_datetime, booked);
+    const result = findNextFreeSlot(provider, requested_datetime, booked);
+    console.log(`[TOOL find_next_free_slot] Found slot:`, result);
+    return result;
   },
 });
 

@@ -105,12 +105,16 @@ class ProviderModel {
       riskScore: json['risk_score'] ?? 'low',
       strikes: json['strikes'] ?? 0,
       isMock: false,
-      distanceKm: 2.0, // Mock distance
+      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? -1.0,
       rankScore: json['calculated_score'] ?? 0,
       rankReason: json['ranking_reason'] ?? '',
       recentReviews: [],
       colorIndex: 0,
       coordinates: json['coordinates'] ?? {'lat': 33.7215, 'lng': 73.0433},
+      photoUrl: json['photo_url'] as String?,
+      availability: (json['availability'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k, List<String>.from(v as List? ?? [])),
+      ),
     );
   }
 
@@ -137,14 +141,17 @@ class ProviderModel {
       'calculated_score': rankScore,
       'ranking_reason': rankReason,
       'coordinates': coordinates,
+      if (distanceKm >= 0) 'distance_km': distanceKm,
+      if (availability.isNotEmpty) 'availability': availability,
+      if (photoUrl != null) 'photo_url': photoUrl,
     };
   }
 
   String get initials => name.split(' ').map((w) => w[0]).take(2).join();
   String get displayPrice => 'Rs. ${rateBasic.toInt()} - ${rateComplex.toInt()}';
-  String get displayDistance => '${distanceKm.toStringAsFixed(1)} km';
+  String get displayDistance => distanceKm >= 0 ? '${distanceKm.toStringAsFixed(1)} km' : area;
   bool get hasStrike => strikes > 0;
-  String get experienceText => '$experienceYears saal ka tajurba';
-  String get onTimeText => '$onTimeScore% waqt par aate hain';
+  String get experienceText => '$experienceYears years experience';
+  String get onTimeText => '$onTimeScore% on-time';
   String get cancellationText => '$cancellationRate% cancellation';
 }

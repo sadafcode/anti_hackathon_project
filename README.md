@@ -527,7 +527,7 @@ The system handles 3 language modes with automatic detection:
 | Discovery + Ranking | GPT-4o-mini | ~1,200 tokens | ~$0.00024 |
 | Pricing generation | GPT-4o-mini | ~800 tokens | ~$0.00016 |
 | Booking confirmation | GPT-4o-mini | ~600 tokens | ~$0.00012 |
-| **Total per booking** | | ~3,400 tokens | **~$0.0006** |
+| **Total per booking** | | ~3,400 tokens | **~$0.006** |
 
 At 10,000 bookings/day → ~$6/day in AI costs.
 
@@ -709,4 +709,4 @@ anti_hackathon_project/
 
 ---
 
-*Built for Google Antigravity Hackathon — Challenge 2 | Team: Sadaf*
+*Built for Google Antigravity Hackathon — Challenge 2 | Team: Sadaf Fawad & Ruba Ahmed Khan*

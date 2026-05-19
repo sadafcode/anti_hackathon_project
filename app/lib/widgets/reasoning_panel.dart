@@ -59,15 +59,15 @@ class _ReasoningPanelState extends State<ReasoningPanel> {
   Widget build(BuildContext context) {
     final p = widget.topProvider;
     final steps = [
-      '✓  Samajh gaya: $_serviceLabel, ${widget.locationHint}, kal subah',
-      '✓  3 providers mile aapke area mein',
-      '✓  13 factors check kar raha hoon...',
+      '✓  Understood: $_serviceLabel, ${widget.locationHint}, tomorrow morning',
+      '✓  Found 3 providers in your area',
+      '✓  Checking 13 ranking factors...',
       '    → ${p.name}: Score ${p.rankScore}/100\n'
           '       Available ✓  ·  ${p.displayDistance} ✓  ·  Rating ${p.rating} ✓\n'
           '       On-time ${p.onTimeScore}% ✓  ·  Specialist ✓',
-      '    → Doosra provider: Score 71/100\n'
+      '    → 2nd provider: Score 71/100\n'
           '       Available ✓  ·  2.4km  ·  Rating 4.3',
-      '✓  Decision: ${p.name} best match',
+      '✓  Decision: ${p.name} is the best match',
     ];
 
     return Align(
@@ -112,7 +112,7 @@ class _ReasoningPanelState extends State<ReasoningPanel> {
                   const Icon(Icons.check_circle, color: AppTheme.primary, size: 15),
                 const SizedBox(width: 8),
                 Text(
-                  _complete ? 'Match mil gaya!' : 'Soch raha hoon...',
+                  _complete ? 'Best match found!' : 'Analyzing...',
                   style: const TextStyle(
                     color: AppTheme.primary,
                     fontWeight: FontWeight.w700,

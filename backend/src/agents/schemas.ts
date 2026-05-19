@@ -142,3 +142,18 @@ export const DisputeOutputSchema = z.object({
   status: z.enum(['resolved', 'pending_user_approval', 'blacklisted']),
   gemini_reasoning: z.string().nullable(),
 });
+
+// Dispute report output
+export const DisputeReportSchema = z.object({
+  summary: z.string().describe('Neutral summary of what the dispute is about'),
+  client_perspective: z.string().describe("Neutral analysis of the client's arguments, claims, and evidence"),
+  provider_perspective: z.string().describe("Neutral analysis of the provider's arguments and claims"),
+  evidence_analysis: z.string().describe('Neutral evaluation of the evidence provided, including photo descriptions or other details'),
+  key_discrepancies: z.array(z.string()).describe('List of points where client and provider claims clash or contradict'),
+  severity_level: z.enum(['low', 'medium', 'high']).describe('Severity level of the dispute'),
+  recommended_action: z.string().describe('Recommended action for the human support team'),
+  gemini_reasoning: z.string().nullable().describe('Detailed internal reasoning of the agent'),
+});
+
+export type DisputeReport = z.infer<typeof DisputeReportSchema>;
+

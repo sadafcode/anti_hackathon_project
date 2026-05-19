@@ -1,10 +1,16 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PhoneAuthService {
   static final _auth = FirebaseAuth.instance;
   static String? _verificationId;
+  static bool _webDemoMode = false;
+
+  // Test numbers for Chrome/web demo
+  static const _testNumbers = ['03492083169', '03100017745', '+923492083169', '+923100017745'];
+  static const _testOtp = '123456';
 
   static String _normalize(String phone) {
     phone = phone.replaceAll(RegExp(r'[\s\-()+]'), '');
@@ -14,22 +20,27 @@ class PhoneAuthService {
     return phone;
   }
 
-  // Returns null on success, error string on failure.
-  // Uses a real Completer so we wait for codeSent/verificationFailed callbacks
-  // before returning — the old code used Future<void>.value() which was
-  // already complete and returned before any callback fired.
   static Future<String?> sendOtp(String rawPhone) async {
+    // Chrome/web: Firebase verifyPhoneNumber not supported — use demo bypass
+    if (kIsWeb) {
+      final clean = rawPhone.replaceAll(RegExp(r'[\s\-()+]'), '');
+      final isTest = _testNumbers.any((t) => t.replaceAll(RegExp(r'[\s\-()+]'), '') == clean);
+      if (isTest) {
+        _webDemoMode = true;
+        return null; // success — OTP "sent"
+      }
+      return 'On Chrome, only test numbers work: 03492083169 or 03100017745';
+    }
+
     final phone = _normalize(rawPhone);
     final completer = Completer<String?>();
 
-    // Fire-and-forget — don't await; the callbacks below complete the future.
     // ignore: unawaited_futures
     _auth
         .verifyPhoneNumber(
       phoneNumber: phone,
       timeout: const Duration(seconds: 60),
       verificationCompleted: (_) {
-        // Auto-verified on Android (rare) — treat as success
         if (!completer.isCompleted) completer.complete(null);
       },
       verificationFailed: (e) {
@@ -45,7 +56,6 @@ class PhoneAuthService {
       },
       codeAutoRetrievalTimeout: (verificationId) {
         _verificationId = verificationId;
-        // This fires after timeout — only complete if nothing else did yet
         if (!completer.isCompleted) completer.complete(null);
       },
     )
@@ -55,18 +65,21 @@ class PhoneAuthService {
       }
     });
 
-    // Wait up to 30 s for a callback (safety net so UI never hangs forever)
     return completer.future.timeout(
       const Duration(seconds: 30),
       onTimeout: () {
-        if (_verificationId != null) return null; // codeSent already fired
+        if (_verificationId != null) return null;
         return 'OTP timeout. Internet ya number check karein.';
       },
     );
   }
 
-  // Returns true if OTP is correct
   static Future<bool> verifyOtp(String otp) async {
+    // Chrome/web demo bypass
+    if (kIsWeb && _webDemoMode) {
+      return otp == _testOtp;
+    }
+
     if (_verificationId == null) return false;
     try {
       final credential = PhoneAuthProvider.credential(

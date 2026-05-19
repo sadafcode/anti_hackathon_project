@@ -68,7 +68,7 @@ class BookingStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             const Text(
-              'Provider ka Intezaar',
+              'Waiting for Provider',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -77,14 +77,14 @@ class BookingStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              '$providerName apki request dekh rahe hain...',
+              '$providerName is reviewing your request...',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: AppTheme.textGrey),
             ),
             const SizedBox(height: 24),
             _infoCard(
               Icons.info_outline,
-              'Provider ko 5 minute mein jawab dena hoga. Agar jawab na aye tu doosra provider dhoondha jaye ga.',
+              'The provider has 5 minutes to respond. If no response, the next best provider will be found automatically.',
               Colors.blue.shade600,
               Colors.blue.shade50,
             ),
@@ -146,7 +146,7 @@ class BookingStatusScreen extends StatelessWidget {
                 Icon(Icons.check_circle, color: Colors.white, size: 56),
                 SizedBox(height: 10),
                 Text(
-                  'Provider Ne Accept Kar Liya!',
+                  'Provider Accepted!',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -155,7 +155,7 @@ class BookingStatusScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Aapki booking confirm ho gayi hai',
+                  'Your booking is confirmed',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
@@ -166,8 +166,8 @@ class BookingStatusScreen extends StatelessWidget {
             _DetailRow(Icons.person_outline, 'Provider', pName),
             _DetailRow(Icons.build_outlined, 'Service', svcType),
             if (serviceDetails != null && serviceDetails.isNotEmpty)
-              _DetailRow(Icons.description_outlined, 'Kaam', serviceDetails),
-            _DetailRow(Icons.location_on_outlined, 'Pata', fullAddress ?? area),
+              _DetailRow(Icons.description_outlined, 'Task', serviceDetails),
+            _DetailRow(Icons.location_on_outlined, 'Address', fullAddress ?? area),
             _DetailRow(Icons.calendar_today_outlined, 'Date/Time', data['datetime'] as String? ?? ''),
             _DetailRow(
               Icons.payments_outlined,
@@ -180,7 +180,7 @@ class BookingStatusScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _infoCard(
             Icons.phone_outlined,
-            'Provider jald hi aap se rabta kare ga. Koi masla ho tu KhidmatBot support se milein.',
+            'The provider will contact you shortly. For any issues, reach out to KhidmatBot support.',
             AppTheme.primary,
             AppTheme.primaryLight,
           ),
@@ -199,7 +199,7 @@ class BookingStatusScreen extends StatelessWidget {
               ),
               icon: const Icon(Icons.track_changes_outlined, color: Colors.white, size: 20),
               label: const Text(
-                'Kaam Track Karo / Review Do',
+                'Track Service / Leave Review',
                 style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
               ),
               style: ElevatedButton.styleFrom(
@@ -233,7 +233,7 @@ class BookingStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Provider Busy Hai',
+              'Provider is Busy',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -249,7 +249,7 @@ class BookingStatusScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'Wajah: $reason',
+                  'Reason: $reason',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 13, color: AppTheme.textGrey),
                 ),
@@ -257,7 +257,7 @@ class BookingStatusScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _infoCard(
               Icons.autorenew,
-              'Doosra provider dhoondha ja raha hai. Chat mein wapas jayein.',
+              'Finding another provider. Please go back to the chat.',
               Colors.orange.shade600,
               Colors.orange.shade50,
             ),
@@ -285,7 +285,7 @@ class BookingStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Booking Cancel Ho Gayi',
+              'Booking Cancelled',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -294,7 +294,7 @@ class BookingStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Provider ne booking cancel kar di. Naya provider dhoondha ja raha hai.',
+              'The provider cancelled the booking. Finding a new provider.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: AppTheme.textGrey),
             ),

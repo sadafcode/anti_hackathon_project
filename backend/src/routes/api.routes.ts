@@ -9,6 +9,7 @@ import { pricingAgent } from '../agents/pricing.agent';
 import { bookingAgent } from '../agents/booking.agent';
 import { feedbackAgent } from '../agents/feedback.agent';
 import { disputeAgent } from '../agents/dispute.agent';
+import { disputeReportAgent } from '../agents/dispute-report.agent';
 
 import { ChatOutputSchema } from '../agents/schemas';
 import { sessionService } from '../services/session.service';
@@ -20,6 +21,48 @@ import { sendPushNotification, getProviderFcmToken, getClientFcmToken } from '..
 import fs from 'fs';
 import path from 'path';
 import * as admin from 'firebase-admin';
+import nodemailer from 'nodemailer';
+
+const TEAM_EMAIL = process.env.TEAM_EMAIL || 'khanruba603@gmail.com';
+
+async function sendDisputeReportEmail(disputeId: string, dispute: any, report: any) {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.SMTP_EMAIL,
+        pass: process.env.SMTP_APP_PASSWORD,
+      },
+    });
+
+    const html = `
+      <h2 style="color:#1a3c5e">Antigravity — Dispute AI Report</h2>
+      <p><b>Dispute ID:</b> ${disputeId}</p>
+      <p><b>Booking ID:</b> ${dispute.booking_id || 'N/A'}</p>
+      <p><b>Issue:</b> ${dispute.issue_type || 'N/A'}</p>
+      <hr/>
+      <h3>Summary</h3><p>${report?.summary || 'N/A'}</p>
+      <h3>Client's Side</h3><p>${report?.client_perspective || 'N/A'}</p>
+      <h3>Provider's Side</h3><p>${report?.provider_perspective || 'N/A'}</p>
+      <h3>Evidence Analysis</h3><p>${report?.evidence_analysis || 'N/A'}</p>
+      <h3>Severity</h3><p>${report?.severity_level || 'N/A'}</p>
+      <h3>Recommended Action</h3><p>${report?.recommended_action || 'N/A'}</p>
+      <hr/>
+      <p style="color:gray;font-size:12px">Yeh report Antigravity AI ne tayyar ki hai. Final faisla team karega.</p>
+    `;
+
+    const info = await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'Antigravity Disputes'}" <${process.env.SMTP_EMAIL}>`,
+      to: TEAM_EMAIL,
+      subject: `[Dispute] ${disputeId} — AI Report Tayyar`,
+      html,
+    });
+
+    console.log(`[Email] Dispute report sent to ${process.env.SMTP_EMAIL}. MessageId: ${info.messageId}`);
+  } catch (err: any) {
+    console.error('[Email] Failed to send dispute report email:', err.message);
+  }
+}
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -427,6 +470,17 @@ function rankList(providers: any[], isAvailable: boolean, dayName: string, inten
       calculated_score = Math.max(0, calculated_score - 35);
     }
 
+    // Reputation penalties: demote providers despite high static rating
+    let sentimentPenalty = 0;
+    if (p.review_sentiment === 'negative') sentimentPenalty = 20;
+    else if (p.review_sentiment === 'mostly_negative') sentimentPenalty = 10;
+
+    let cancellationPenalty = 0;
+    if (p.cancellation_rate >= 20) cancellationPenalty = 15;
+    else if (p.cancellation_rate >= 12) cancellationPenalty = 8;
+
+    calculated_score = Math.max(0, calculated_score - sentimentPenalty - cancellationPenalty);
+
     return {
       ...p,
       same_area: p.same_area || false,
@@ -439,6 +493,8 @@ function rankList(providers: any[], isAvailable: boolean, dayName: string, inten
         specialization: specScore,
         price_vs_budget: priceScore,
         nadra_trust: nadraScore,
+        sentiment_penalty: -sentimentPenalty,
+        cancellation_penalty: -cancellationPenalty,
       },
     };
   });
@@ -781,7 +837,19 @@ router.post('/contract/accept', async (req, res) => {
       }
 
       console.log(`[Contract] Booking ${record.id} created for provider ${providerId}`);
-      return res.json({ success: true, booking_id: record.id });
+      const actionTrace = [{
+        agent: "Action Execution",
+        step: 5,
+        key_inputs: { provider_id: providerId, contract_id },
+        key_outputs: {
+          provider_notified: "FCM notification sent to provider",
+          booking_status: "pending — awaiting provider response",
+          booking_id: record.id,
+          receipt_sent: true
+        },
+        decision: `Contract locked. Booking ${record.id} created, provider notified.`
+      }];
+      return res.json({ success: true, booking_id: record.id, agent_traces: actionTrace });
     } else if (party === 'provider') {
       const providerId: string = req.body.provider_id || 'unknown';
       const record = bookingStore.createBooking({
@@ -838,6 +906,7 @@ INTENT: ${JSON.stringify({
 
 PRICING TOTAL: Rs.${pricing?.total || 0}
 
+ALL RANKED PROVIDERS: ${JSON.stringify((all_ranked_providers || []).map((p: any) => ({ id: p.id, name: p.name })))}
 ALL RANKED PROVIDERS COUNT: ${(all_ranked_providers || []).length}
 IS RETURNING USER: ${is_returning_user || false}
 CLIENT SESSION ID: ${client_session_id || 'none'}
@@ -967,7 +1036,8 @@ router.post('/dispute', async (req, res) => {
         if (bookingDoc.exists) {
           const bookingData = bookingDoc.data();
           if (bookingData) {
-            resolvedProviderId = bookingData.provider_id || resolvedProviderId;
+            // Flutter writes camelCase (providerId), backend wrote snake_case (provider_id) — check both
+            resolvedProviderId = bookingData.providerId || bookingData.provider_id || resolvedProviderId;
             resolvedOriginalPrice = bookingData.amount || resolvedOriginalPrice;
           }
         }
@@ -976,7 +1046,6 @@ router.post('/dispute', async (req, res) => {
       }
     }
 
-    // Always log dispute under pending_provider_response when booking is referenced
     const status = booking_id ? 'pending_provider_response' : 'no_booking_reference';
 
     await db.collection('disputes').doc(disputeId).set({
@@ -991,12 +1060,31 @@ router.post('/dispute', async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
+    // Send FCM notification to provider (fire-and-forget)
+    if (resolvedProviderId) {
+      getProviderFcmToken(resolvedProviderId).then(token => {
+        if (token) {
+          sendPushNotification({
+            token,
+            title: 'Naya Dispute Darj Hua!',
+            body: `Client ne ek complaint file ki hai: "${resolvedDescription.substring(0, 60)}..." — Apna jawab dein.`,
+            data: {
+              type: 'new_dispute',
+              dispute_id: disputeId,
+              booking_id: booking_id || '',
+              screen: 'provider_notification',
+            },
+          });
+        }
+      }).catch(() => {});
+    }
+
     res.json({
       success: true,
       dispute_id: disputeId,
       status: status,
-      resolution: booking_id 
-        ? 'Dispute filed. Awaiting provider response.' 
+      resolution: booking_id
+        ? 'Dispute filed. Awaiting provider response.'
         : 'Aap ka dispute darj ho gaya. 24 ghante mein jawab milega.'
     });
   } catch (error: any) {
@@ -1122,6 +1210,91 @@ Follow the rules and evaluation criteria strictly. Do not hallucinate any price 
   }
 });
 
+router.post('/dispute/analyze', async (req, res) => {
+  try {
+    const { dispute_id } = req.body;
+    if (!dispute_id) {
+      return res.status(400).json({ error: 'dispute_id is required' });
+    }
+
+    const db = getFirestoreDb();
+    const disputeDoc = await db.collection('disputes').doc(dispute_id).get();
+    if (!disputeDoc.exists) {
+      return res.status(404).json({ error: 'Dispute not found' });
+    }
+
+    const dispute = disputeDoc.data();
+    if (!dispute) {
+      return res.status(404).json({ error: 'Dispute has no data' });
+    }
+
+    let originalPrice = dispute.original_price || 1500;
+    if (dispute.booking_id) {
+      try {
+        const bookingDoc = await db.collection('bookings').doc(dispute.booking_id).get();
+        if (bookingDoc.exists) {
+          const bookingData = bookingDoc.data();
+          if (bookingData && typeof bookingData.amount === 'number') {
+            originalPrice = bookingData.amount;
+          }
+        }
+      } catch (err: any) {
+        console.error('[Dispute Analyze] Booking fetch error:', err.message);
+      }
+    }
+
+    let providerData: any = null;
+    if (dispute.provider_id) {
+      try {
+        const providerDoc = await db.collection('providers').doc(dispute.provider_id).get();
+        if (providerDoc.exists) {
+          providerData = providerDoc.data();
+        }
+      } catch (err: any) {
+        console.error('[Dispute Analyze] Provider fetch error:', err.message);
+      }
+    }
+
+    const prompt = `Perform a neutral analysis report for this customer dispute:
+
+DISPUTE TYPE: ${dispute.issue_type}
+USER COMPLAINT: ${dispute.description}
+EVIDENCE PHOTOS: ${JSON.stringify(dispute.evidence_photos || [])}
+PROVIDER DEFENSE/RESPONSE: ${dispute.provider_response || 'No response submitted.'}
+
+PROVIDER DETAILS:
+- ID: ${dispute.provider_id || 'unknown'}
+- Name: ${providerData?.name || 'Provider'}
+
+FINANCIAL DETAILS:
+- Original Agreed Price: Rs.${originalPrice}
+
+Provide a completely objective analysis and return the structured report.`;
+
+    const result = await run(disputeReportAgent, prompt, { maxTurns: 20 });
+    const finalReport = result.finalOutput as any;
+
+    await db.collection('disputes').doc(dispute_id).update({
+      ai_report: finalReport,
+      status: 'pending_team_decision',
+      analyzedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Fire-and-forget email to team
+    sendDisputeReportEmail(dispute_id, dispute, finalReport);
+
+    res.json({
+      success: true,
+      dispute_id,
+      status: 'pending_team_decision',
+      ai_report: finalReport,
+    });
+  } catch (error: any) {
+    console.error('[/dispute/analyze]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const DAY_NORMALIZE: Record<string, string> = {
   'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday',
   'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday', 'Sun': 'sunday',
@@ -1188,6 +1361,54 @@ router.post('/provider/register', async (req, res) => {
     res.json({ status: 'success', provider: newProvider, nadra_status, message: messages[nadra_status] });
   } catch (error: any) {
     console.error('[/provider/register]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── 7b. AUTO-RESCHEDULE (no LLM — direct bookingStore + FCM) ────────────────
+router.post('/booking/reschedule', async (req, res) => {
+  try {
+    const { declined_booking_id, next_provider, intent, pricing, all_ranked_providers, client_session_id } = req.body;
+    if (!next_provider?.id) return res.status(400).json({ error: 'next_provider required' });
+
+    const record = bookingStore.createBooking({
+      provider_id: next_provider.id,
+      service_type: intent?.service_type || next_provider.service_types?.[0] || 'service',
+      datetime: intent?.datetime || new Date(Date.now() + 86400000).toISOString(),
+      total_price: pricing?.total || next_provider.hourly_rate || 0,
+      intent: intent || {},
+      all_ranked_providers: all_ranked_providers || [],
+      is_returning_user: false,
+      client_session_id: client_session_id || '',
+    });
+
+    // Send FCM to new provider (fire-and-forget)
+    const serviceLabel = (intent?.service_type || '').replace(/_/g, ' ');
+    const area = intent?.location?.area || next_provider.area || '';
+    getProviderFcmToken(next_provider.id).then((token: string | null) => {
+      if (token) {
+        sendPushNotification({
+          token,
+          title: 'Nayi Booking Request!',
+          body: `${serviceLabel} ki request aayi hai — ${area}. Accept ya decline karein.`,
+          data: {
+            type: 'new_booking',
+            booking_id: record.id,
+            provider_id: next_provider.id,
+            screen: 'provider_notification',
+          },
+        });
+      }
+    });
+
+    res.json({
+      booking_id: record.id,
+      provider_id: next_provider.id,
+      provider_name: next_provider.name,
+      status: 'pending',
+    });
+  } catch (error: any) {
+    console.error('[/booking/reschedule]', error.message);
     res.status(500).json({ error: error.message });
   }
 });

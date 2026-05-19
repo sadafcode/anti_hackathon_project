@@ -325,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen>
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: Text(
-                        'Theek Hai',
+                        'OK',
                         style: GoogleFonts.manrope(
                           fontWeight: FontWeight.bold,
                           color: kPrimaryNavy,
@@ -579,7 +579,7 @@ class _HomeScreenState extends State<HomeScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'KhidmatBot Kholein',
+                      'Open KhidmatBot',
                       style: GoogleFonts.manrope(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -653,7 +653,7 @@ class _HomeScreenState extends State<HomeScreen>
           iconColor: kErrorRed,
           iconBgColor: kErrorContainer.withValues(alpha: 0.3),
           circleBgColor: kErrorRed,
-          title: 'Shikayat Darj Karein',
+          title: 'File a Complaint',
           subtitle: 'Report any service issues',
           onTap: () => Navigator.push(
             context,
@@ -880,12 +880,12 @@ class _HomeScreenState extends State<HomeScreen>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                'Agar aapne register kiya tha to Provider ID registration ke baad milti hai. Notification aane par automatically khul jata hai.',
+                'If you have registered, your Provider ID is given after registration. It opens automatically when a notification arrives.',
                 style: TextStyle(fontSize: 11, color: kOnSurfaceVariant),
               ),
             ),
             const SizedBox(height: 14),
-            const Text('Provider ID daalein:',
+            const Text('Enter Provider ID:',
                 style: TextStyle(fontSize: 13, color: kOnSurfaceVariant)),
             const SizedBox(height: 8),
             TextField(

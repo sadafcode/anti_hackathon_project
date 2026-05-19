@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/scheduler.dart';
 import '../models/provider_model.dart';
@@ -188,8 +189,47 @@ class _MicroContractCardState extends State<MicroContractCard> {
                     
                     if (status == 'cancelled' || _declined)
                       _badge('Contract Cancelled ✗', Colors.red.shade50, Colors.red.shade700)
-                    else if (status == 'locked')
-                      _badge('Contract Locked ✓', Colors.green.shade50, Colors.green.shade700)
+                    else if (status == 'locked') ...[
+                      _badge('Contract Locked ✓', Colors.green.shade50, Colors.green.shade700),
+                      if (bookingId.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Booking Ref: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            Text(
+                              bookingId,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.copy, size: 14, color: Colors.grey),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: bookingId));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Booking reference copied to clipboard!'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ]
                     else if (userAccepted && !providerAccepted)
                       _badge('Waiting for provider...', Colors.amber.shade50, Colors.amber.shade800, isPulsing: true)
                     else ...[

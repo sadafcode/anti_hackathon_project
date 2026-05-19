@@ -188,7 +188,7 @@ class _PricingScreenState extends State<PricingScreen> {
             _lineItem('Surge Pricing  (Peak hours)', pricing.surgeAmount,
                 prefix: '+')
           else
-            _lineItemNote('Surge Pricing', 'Lagu nahi'),
+            _lineItemNote('Surge Pricing', 'Not applied'),
           const SizedBox(height: 10),
           _lineItem(
             'Loyalty Discount',
@@ -253,7 +253,7 @@ class _PricingScreenState extends State<PricingScreen> {
           ),
           const SizedBox(height: 10),
           _fairnessRow(
-            'Provider ko milega',
+            'Provider will receive',
             'Rs. ${pricing.providerReceives}',
             Colors.green.shade700,
           ),
@@ -275,7 +275,7 @@ class _PricingScreenState extends State<PricingScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Provider ko ${pricing.providerPercent}% milta hai — fair share',
+            'Provider receives ${pricing.providerPercent}% — fair share',
             style: TextStyle(fontSize: 11, color: Colors.green.shade700),
           ),
         ],
@@ -339,7 +339,7 @@ class _PricingScreenState extends State<PricingScreen> {
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 ),
                 child: Text(
-                  'Yeh Chahiye',
+                  'I want this',
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.amber.shade900,
@@ -401,7 +401,7 @@ class _PricingScreenState extends State<PricingScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: const Text(
-                      'Budget Option\nChahiye',
+                      'Budget\nOption',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
@@ -433,7 +433,7 @@ class _PricingScreenState extends State<PricingScreen> {
                             ),
                           )
                         : const Text(
-                            'Yeh Price Accept Karo',
+                            'Accept this Price',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 14,
@@ -527,10 +527,10 @@ class _PricingScreenState extends State<PricingScreen> {
       );
       final bookingId = response['booking_id'] as String? ?? '';
 
-      // Write booking to Firestore using client SDK (no Admin credentials needed)
+      // Write booking to Firestore so customer's waiting screen gets real-time updates
       if (bookingId.isNotEmpty) {
         try {
-          await BookingFirestoreService.createBookingAtomically(
+          await BookingFirestoreService.createBooking(
             bookingId: bookingId,
             providerId: provider.id,
             providerName: provider.name,
@@ -539,12 +539,10 @@ class _PricingScreenState extends State<PricingScreen> {
             amount: pricing.total,
             datetime: intent?['datetime'] as String? ??
                 DateTime.now().add(const Duration(days: 1)).toIso8601String(),
-            serviceDetails: intent?['service_details'] as String?,
-            fullAddress: intent?['full_address'] as String?,
-            houseNumber: intent?['house_number'] as String?,
-            street: intent?['street'] as String?,
           );
-        } catch (_) {}
+        } catch (firestoreErr) {
+          debugPrint('[Firestore] Booking write failed: $firestoreErr');
+        }
       }
 
       if (!context.mounted) return;
@@ -576,7 +574,7 @@ class _PricingScreenState extends State<PricingScreen> {
     final conflict = response['conflict_info'] as Map<String, dynamic>?;
     final providerName = response['provider_name'] ?? provider.name;
     final nextSlot =
-        conflict?['next_available_slot'] ?? 'Schedule maloom nahi';
+        conflict?['next_available_slot'] ?? 'Schedule unavailable';
     final matchExplanation = conflict?['perfect_match_explanation'] ?? '';
     final secondBest = conflict?['second_best_provider'] as Map<String, dynamic>?;
 
@@ -590,7 +588,7 @@ class _PricingScreenState extends State<PricingScreen> {
             const SizedBox(width: 8),
             const Flexible(
               child: Text(
-                'Yeh slot booked hai',
+                'This slot is already booked',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ),
@@ -617,7 +615,7 @@ class _PricingScreenState extends State<PricingScreen> {
                         Icon(Icons.star, color: Colors.blue.shade700, size: 14),
                         const SizedBox(width: 4),
                         Text(
-                          'Kiyun $providerName perfect match tha:',
+                          'Why $providerName was a perfect match:',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -655,7 +653,7 @@ class _PricingScreenState extends State<PricingScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '$providerName ka agla free slot:',
+                            '$providerName\'s next available slot:',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -695,7 +693,7 @@ class _PricingScreenState extends State<PricingScreen> {
                               color: Colors.amber.shade800, size: 16),
                           const SizedBox(width: 6),
                           Text(
-                            'Apne time par chahiye? Doosra best option:',
+                            'Need it on your schedule? Next best option:',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -737,7 +735,7 @@ class _PricingScreenState extends State<PricingScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Theek Hai'),
+            child: const Text('OK'),
           ),
           if (secondBest != null)
             ElevatedButton(
@@ -746,7 +744,7 @@ class _PricingScreenState extends State<PricingScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                        '${secondBest['name']} ko book karne ke liye wapas jayen'),
+                        'Go back to book ${secondBest['name']}'),
                     backgroundColor: Colors.amber.shade700,
                   ),
                 );
@@ -756,7 +754,7 @@ class _PricingScreenState extends State<PricingScreen> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text('Doosra Choose Karo',
+              child: const Text('Choose Another',
                   style: TextStyle(color: Colors.white)),
             ),
         ],
@@ -841,7 +839,9 @@ class _PricingScreenState extends State<PricingScreen> {
                 .add(const Duration(days: 1))
                 .toIso8601String(),
           );
-        } catch (_) {}
+        } catch (firestoreErr) {
+          debugPrint('[Firestore] Budget booking write failed: $firestoreErr');
+        }
       }
 
       if (!context.mounted) return;

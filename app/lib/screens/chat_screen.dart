@@ -63,7 +63,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _currentProviderIndex = 0;
       }
       setState(() {
-        _messages.add(Message.agent('$declinedName ne request decline kar di. Yeh raha agla best provider:'));
+        _messages.add(Message.agent('$declinedName declined the request. Here is the next best provider:'));
         _messages.add(Message.providerCard(
           nextProvider,
           requestedDatetime: ApiService.lastConfirmedIntent?['datetime'] as String?,
@@ -73,7 +73,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       setState(() {
         _messages.add(Message.agent(
-          '$declinedName ne aapki request decline kar di.\n\nMaafi chahte hain — is waqt aapke area mein koi doosra provider available nahi hai. Thodi der baad dobara try karein.',
+          '$declinedName declined your request.\n\nWe\'re sorry — no other providers are available in your area right now. Please try again after some time.',
         ));
       });
     }
@@ -83,7 +83,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _addWelcomeMessage() {
     setState(() {
       _messages.add(Message.agent(
-        'Assalam o Alaikum! Main aapka service assistant hoon.\n\nBatayein kya kaam hai? Plumber, electrician, AC technician, tutor — jo bhi chahiye, main dhundh kar deta hoon.',
+        'Hello! I am your service assistant.\n\nTell me what you need — Plumber, Electrician, AC Technician, Tutor, and more. I will find the best match for you.',
       ));
     });
   }
@@ -136,7 +136,7 @@ class _ChatScreenState extends State<ChatScreen> {
         } else if (lang == 'urdu') {
           searchMsg = 'سمجھ گیا۔ آپ کے لیے بہترین providers تلاش کر رہا ہوں...';
         } else {
-          searchMsg = 'Samajh gaya. Aap ke liye best providers dhundh raha hoon...';
+          searchMsg = 'Got it. Searching for the best providers for you...';
         }
 
         setState(() {
@@ -160,7 +160,7 @@ class _ChatScreenState extends State<ChatScreen> {
         if (discoveryResp['status'] == 'no_providers') {
            setState(() {
               _isTyping = false;
-              _messages.add(Message.agent(discoveryResp['message'] ?? 'Is area mein abhi koi provider available nahi.'));
+              _messages.add(Message.agent(discoveryResp['message'] ?? 'No providers are currently available in this area.'));
            });
            _scrollToBottom();
 
@@ -219,7 +219,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _currentProviderIndex >= _currentProviders!.length - 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Is area mein aur koi provider available nahi.'),
+          content: const Text('No more providers available in this area.'),
           backgroundColor: Colors.grey.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -230,7 +230,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _currentProviderIndex++;
     final next = _currentProviders![_currentProviderIndex];
     setState(() {
-      _messages.add(Message.agent('Dosra option:'));
+      _messages.add(Message.agent('Next option:'));
       _messages.add(Message.providerCard(next, requestedDatetime: ApiService.lastConfirmedIntent?['datetime'] as String?, serviceDetails: ApiService.lastConfirmedIntent?['service_details'] as String?));
     });
     _scrollToBottom();
@@ -487,7 +487,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: TextField(
                         controller: _inputController,
                         decoration: const InputDecoration(
-                          hintText: 'Kya kaam chahiye? (Roman Urdu/English)',
+                          hintText: 'What service do you need? (English/Urdu)',
                           hintStyle:
                               TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
                           border: InputBorder.none,

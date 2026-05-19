@@ -1,7 +1,7 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../screens/provider_profile_screen.dart';
@@ -15,6 +15,7 @@ class ProviderCardBubble extends StatefulWidget {
   final VoidCallback? onShowAlternative;
   final String? requestedDatetime; // ISO datetime to check day availability
   final String? serviceDetails;    // What client described — shown as scope
+  final String? bookingId;         // Booking reference if available
   final void Function(PricingModel pricing, String contractId) onContractCreated;
 
   const ProviderCardBubble({
@@ -24,6 +25,7 @@ class ProviderCardBubble extends StatefulWidget {
     this.onShowAlternative,
     this.requestedDatetime,
     this.serviceDetails,
+    this.bookingId,
   });
 
   @override
@@ -69,7 +71,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Card capture ho gaya! Save karne ke liye gallery_saver plugin add karein.'),
+            content: const Text('Card captured! Add gallery_saver plugin to save to your gallery.'),
             backgroundColor: AppTheme.primary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -242,8 +244,8 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                   const SizedBox(height: 2),
                   Text(
                     p.totalReviews == 0
-                        ? '${p.experienceYears} saal ka tajurba'
-                        : '${p.totalReviews} reviews  •  ${p.experienceYears} saal ka tajurba',
+                        ? '${p.experienceYears} yrs experience'
+                        : '${p.totalReviews} reviews  •  ${p.experienceYears} yrs experience',
                     style: const TextStyle(fontSize: 11, color: Color(0xFF999999)),
                   ),
                 ],
@@ -264,7 +266,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
               const Icon(Icons.star_border, color: Colors.grey, size: 15)),
           const SizedBox(width: 4),
           const Text(
-            'Nayi registration',
+            'New registration',
             style: TextStyle(fontSize: 11, color: Color(0xFF999999)),
           ),
         ],
@@ -361,7 +363,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                 const Icon(Icons.psychology_outlined, size: 15, color: AppTheme.primary),
                 const SizedBox(width: 6),
                 const Text(
-                  'Kyun select kiya?',
+                  'Why selected?',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.primary,
@@ -401,6 +403,8 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
     final serviceName = widget.provider.serviceTypes.isNotEmpty
         ? widget.provider.serviceTypes.first.replaceAll('_', ' ')
         : 'service';
+    final actualBookingId = widget.bookingId ?? ApiService.lastConfirmedIntent?['booking_id'] as String?;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
       padding: const EdgeInsets.all(10),
@@ -417,7 +421,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
               Icon(Icons.receipt_long_outlined, color: Color(0xFF1565C0), size: 14),
               SizedBox(width: 5),
               Text(
-                'Tey Shuda Booking Details',
+                'Confirmed Booking Details',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -429,9 +433,54 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
           const SizedBox(height: 6),
           _scopeRow('Service', serviceName),
           const SizedBox(height: 3),
-          _scopeRow('Kaam', details),
+          _scopeRow('Task', details),
+          if (actualBookingId != null) ...[
+            const SizedBox(height: 3),
+            _bookingIdScopeRow('Booking ID', actualBookingId),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _bookingIdScopeRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF1565C0),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF1A1A1A),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 5),
+        GestureDetector(
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: value));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$value copied!'),
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          },
+          child: const Icon(
+            Icons.copy,
+            size: 11,
+            color: Color(0xFF1565C0),
+          ),
+        ),
+      ],
     );
   }
 
@@ -472,7 +521,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
-                    'Is card ka screenshot lein — dispute file karte waqt yeh booking summary evidence ke tor par kaam aaye gi.',
+                    'Take a screenshot of this card — it serves as evidence when filing a dispute.',
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.4),
                   ),
                 ),
@@ -491,7 +540,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                     )
                   : const Icon(Icons.download_outlined, size: 16, color: AppTheme.primary),
               label: const Text(
-                'Card Download Karein',
+                'Download Card',
                 style: TextStyle(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600),
               ),
               style: OutlinedButton.styleFrom(
@@ -521,7 +570,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              '$dayLabel ko available nahi — koi aur din chunein',
+              '$dayLabel — Not available, please choose another day',
               style: TextStyle(fontSize: 11, color: Colors.amber.shade800, fontWeight: FontWeight.w500),
             ),
           ),
@@ -545,7 +594,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              'Is provider ne pehle ${p.strikes} baar cancel kiya hai',
+              'This provider has cancelled ${p.strikes} time(s) before',
               style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
             ),
           ),
@@ -569,7 +618,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                 padding: const EdgeInsets.symmetric(vertical: 10),
               ),
               child: const Text(
-                'Dosre Dekhein',
+                'See Others',
                 style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
               ),
             ),
@@ -595,7 +644,7 @@ class _ProviderCardBubbleState extends State<ProviderCardBubble> {
                       ),
                     )
                   : const Text(
-                      'Book Karo',
+                      'Book Now',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.white,

@@ -211,9 +211,9 @@ class _ProviderRegistrationScreenState
                 if (ok) {
                   Navigator.pop(ctx);
                   if (mounted) setState(() => _phoneVerified = true);
-                  if (mounted) _showSnack('Phone verify ho gaya! ✓');
+                  if (mounted) _showSnack('Phone verified! ✓');
                 } else {
-                  _showSnack('OTP galat hai, dobara try karein');
+                  _showSnack('Incorrect OTP, please try again');
                 }
               },
               child: const Text('Verify', style: TextStyle(color: Colors.white)),
@@ -229,7 +229,7 @@ class _ProviderRegistrationScreenState
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       setState(() {
         _verifyingNic = false;
-        _nicMismatchMsg = 'NIC scan sirf Android aur iOS pe kaam karta hai.';
+        _nicMismatchMsg = 'NIC scan is only available on Android and iOS.';
       });
       return;
     }
@@ -247,7 +247,7 @@ class _ProviderRegistrationScreenState
       if (match == null) {
         setState(() {
           _verifyingNic = false;
-          _nicMismatchMsg = 'NIC card ki image mein number nahi mila. Saaf photo lein.';
+          _nicMismatchMsg = 'No NIC number found in the image. Please take a clearer photo.';
         });
         return;
       }
@@ -261,11 +261,11 @@ class _ProviderRegistrationScreenState
 
       if (fromImage == typedFormatted) {
         setState(() { _nicVerified = true; _verifyingNic = false; });
-        _showSnack('NIC verify ho gaya! Blue tick milega ✓');
+        _showSnack('NIC verified! You will receive a blue tick ✓');
       } else {
         setState(() {
           _verifyingNic = false;
-          _nicMismatchMsg = 'Match nahi hua.\nImage: $fromImage\nTyped: $typedFormatted';
+          _nicMismatchMsg = 'NIC did not match.\nImage: $fromImage\nTyped: $typedFormatted';
         });
       }
     } catch (e) {
@@ -275,7 +275,7 @@ class _ProviderRegistrationScreenState
 
   Future<void> _pickNicFromGallery() async {
     if (_nicCtrl.text.trim().isEmpty) {
-      _showSnack('Pehle NIC number type karein'); return;
+      _showSnack('Please type your NIC number first'); return;
     }
     final xFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
     if (xFile != null) await _verifyNicFromImage(File(xFile.path));
@@ -283,11 +283,11 @@ class _ProviderRegistrationScreenState
 
   Future<void> _scanNicWithCamera() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
-      _showSnack('NIC scan sirf Android aur iOS pe available hai');
+      _showSnack('NIC scan is only available on Android and iOS');
       return;
     }
     if (_nicCtrl.text.trim().isEmpty) {
-      _showSnack('Pehle NIC number type karein'); return;
+      _showSnack('Please type your NIC number first'); return;
     }
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -526,7 +526,7 @@ class _ProviderRegistrationScreenState
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 readOnly: _nicVerified,
-                helperText: 'NIC verify karo — zyada customers book karenge',
+                helperText: 'Verify your NIC — more customers will book you',
               ),
               const SizedBox(height: 8),
               if (_nicVerified)
@@ -571,7 +571,7 @@ class _ProviderRegistrationScreenState
                         SizedBox(width: 14, height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
                         SizedBox(width: 8),
-                        Text('NIC verify ho raha hai...', style: TextStyle(fontSize: 12, color: AppTheme.textGrey)),
+                        Text('Verifying NIC...', style: TextStyle(fontSize: 12, color: AppTheme.textGrey)),
                       ],
                     ),
                   ),
@@ -600,7 +600,7 @@ class _ProviderRegistrationScreenState
                   ),
                 const SizedBox(height: 4),
                 const Text(
-                  '💡 Clear photo lein — NIC seedhi pakdein, blur nahi',
+                  '💡 Take a clear photo — hold NIC straight, avoid blur',
                   style: TextStyle(fontSize: 11, color: AppTheme.textGrey),
                 ),
               ],
@@ -650,7 +650,7 @@ class _ProviderRegistrationScreenState
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 validator: _requiredValidator,
-                helperText: 'Saaf safai, routine check — e.g. 500',
+                helperText: 'Cleaning, routine check — e.g. 500',
               ),
               const SizedBox(height: 12),
               _buildTextField(
@@ -1407,7 +1407,7 @@ class _ProviderRegistrationScreenState
                           )
                         else
                           Text(
-                            'Tap kar ke available karo',
+                            'Tap to mark available',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey.shade400,
@@ -1429,10 +1429,10 @@ class _ProviderRegistrationScreenState
   Widget _buildValidationSummary() {
     final errors = <String>[];
     if (_nameCtrl.text.trim().isEmpty) errors.add('Pura naam likho');
-    if (!_phoneVerified) errors.add('Phone number verify karo');
+    if (!_phoneVerified) errors.add('Verify your phone number');
     if (_selectedServices.isEmpty) errors.add('Kam az kam ek service chuno');
     if (_selectedArea == null) errors.add('Area chuno');
-    if (_availability.isEmpty) errors.add('Kam az kam ek din select karo');
+    if (_availability.isEmpty) errors.add('Select at least one availability day');
     final incompleteDay = _availability.entries
         .where((e) => e.value.isEmpty)
         .map((e) => e.key)
@@ -1457,7 +1457,7 @@ class _ProviderRegistrationScreenState
               Icon(Icons.cancel_outlined, size: 15, color: Colors.red.shade700),
               const SizedBox(width: 6),
               Text(
-                'Register karne se pehle yeh complete karo:',
+                'Please complete these before registering:',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -1590,7 +1590,7 @@ class _ProviderRegistrationScreenState
               ),
               const SizedBox(height: 20),
               const Text(
-                'Aap register ho gaye!',
+                'You are registered!',
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w900,
@@ -1609,19 +1609,19 @@ class _ProviderRegistrationScreenState
               else if (nicProvided && !_nadraVerified)
                 _buildStatusChip(
                   Icons.warning_amber_outlined,
-                  'NIC verify nahi hua — Blue tick nahi mila',
+                  'NIC not verified — Blue tick not awarded',
                   Colors.orange.shade700,
                 )
               else
                 _buildStatusChip(
                   Icons.info_outline,
-                  'NIC nahi diya — Blue tick nahi mila',
+                  'NIC not provided — Blue tick not awarded',
                   AppTheme.textGrey,
                 ),
 
               const SizedBox(height: 16),
               Text(
-                'Ab customers aapko book kar saktay hain.\nAapki profile ranking, booking, aur penalty system mein shaamil ho gayi hai.',
+                'Customers can now book you.\nYour profile is now part of the ranking, booking, and penalty system.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                     fontSize: 13, color: AppTheme.textGrey),
@@ -1698,7 +1698,7 @@ class _ProviderRegistrationScreenState
                               if (!mounted) return;
                               messenger.showSnackBar(
                                 const SnackBar(
-                                  content: Text('Provider ID copy ho gaya!'),
+                                  content: Text('Provider ID copied!'),
                                   behavior: SnackBarBehavior.floating,
                                   duration: Duration(seconds: 2),
                                 ),
@@ -1956,13 +1956,13 @@ class _AreaSearchSheetState extends State<_AreaSearchSheet> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
-                              'Koi nataij nahi mila',
+                              'No results found',
                               style: TextStyle(color: AppTheme.textGrey, fontSize: 13),
                             ),
                             const SizedBox(height: 8),
                             OutlinedButton.icon(
                               icon: const Icon(Icons.add_location_alt_outlined, size: 16),
-                              label: Text('"$q" use karo'),
+                              label: Text('Use "$q"'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppTheme.primary,
                                 side: const BorderSide(color: AppTheme.primary),

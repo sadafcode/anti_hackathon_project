@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
@@ -23,10 +27,10 @@ class _ProviderNotificationScreenState
 
   final Map<String, TextEditingController> _responseControllers = {};
   final Map<String, bool> _submittingDisputes = {};
+  final Map<String, List<XFile>> _disputeEvidence = {};
+  final ImagePicker _picker = ImagePicker();
 
-  // Smart timeout: 30 min for urgent (same day), 1 hour for advance bookings
-  // In real app this would come from booking data. For demo: 3600s (1 hour).
-  static const int _totalSeconds = 3600;
+  static const int _totalSeconds = 300;
   int _remainingSeconds = _totalSeconds;
   Timer? _countdownTimer;
 
@@ -40,13 +44,11 @@ class _ProviderNotificationScreenState
   bool _isLoading = true;
   Map<String, dynamic>? _realBooking;
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _bookingSubscription;
-
   static const List<String> _declineReasons = [
-    'Already busy hoon',
-    'Zyada door hai',
-    'Tabiyat theek nahi',
-    'Kuch aur wajah',
+    'Already busy',
+    'Too far away',
+    'Not feeling well',
+    'Other reason',
   ];
 
   @override
@@ -70,38 +72,30 @@ class _ProviderNotificationScreenState
       CurvedAnimation(parent: _shakeController, curve: Curves.elasticOut),
     );
 
-    _listenForBookings();
+    _fetchPendingBooking();
   }
 
-  void _listenForBookings() {
-    _bookingSubscription = BookingFirestoreService
-        .providerBookingsStream(widget.providerId)
-        .listen(
-      (snapshot) {
-        if (!mounted) return;
-        if (snapshot.docs.isNotEmpty && _realBooking == null) {
-          // Sort client-side by createdAt to get the latest
-          final docs = snapshot.docs.toList();
-          docs.sort((a, b) {
-            final aTs = a.data()['createdAt'] as Timestamp?;
-            final bTs = b.data()['createdAt'] as Timestamp?;
-            if (aTs == null || bTs == null) return 0;
-            return bTs.compareTo(aTs);
-          });
-          final data = docs.first.data();
+  Future<void> _fetchPendingBooking() async {
+    try {
+      final bookings = await ApiService.getPendingBookings(widget.providerId);
+      if (mounted) {
+        if (bookings.isNotEmpty) {
           setState(() {
-            _realBooking = data;
+            _realBooking = Map<String, dynamic>.from(bookings.last as Map);
             _isLoading = false;
           });
           _startCountdown();
-        } else if (_realBooking == null) {
+        } else {
           setState(() => _isLoading = false);
         }
-      },
-      onError: (_) {
-        if (mounted) setState(() => _isLoading = false);
-      },
-    );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error fetching bookings: $e')));
+      }
+    }
   }
 
   void _startCountdown() {
@@ -123,7 +117,6 @@ class _ProviderNotificationScreenState
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _bookingSubscription?.cancel();
     _successController.dispose();
     _shakeController.dispose();
     super.dispose();
@@ -141,10 +134,10 @@ class _ProviderNotificationScreenState
     );
 
     try {
-      await BookingFirestoreService.acceptBooking(bookingId);
-      // Best-effort backend call for business logic
+      await ApiService.respondToBooking(bookingId, widget.providerId, 'accept');
+      // Update Firestore so customer's waiting screen gets real-time notification
       try {
-        await ApiService.respondToBooking(bookingId, widget.providerId, 'accept');
+        await BookingFirestoreService.acceptBooking(bookingId);
       } catch (_) {}
 
       if (mounted) {
@@ -184,11 +177,11 @@ class _ProviderNotificationScreenState
     );
 
     try {
-      await BookingFirestoreService.declineBooking(bookingId, _declineReason!);
-      // Best-effort backend call for auto-reschedule
+      await ApiService.respondToBooking(bookingId, widget.providerId, 'decline',
+          reason: _declineReason);
+      // Update Firestore so customer's waiting screen gets real-time notification
       try {
-        await ApiService.respondToBooking(bookingId, widget.providerId, 'decline',
-            reason: _declineReason);
+        await BookingFirestoreService.declineBooking(bookingId, _declineReason ?? '');
       } catch (_) {}
 
       if (mounted) {
@@ -290,7 +283,7 @@ class _ProviderNotificationScreenState
                 padding: EdgeInsets.all(16),
                 child: Center(
                   child: Text(
-                    'Abhi koi naya booking request nahi hai.',
+                    'No new booking requests at the moment.',
                     style: TextStyle(fontSize: 14, color: AppTheme.textGrey, fontWeight: FontWeight.w500),
                   ),
                 ),
@@ -356,7 +349,7 @@ class _ProviderNotificationScreenState
               Icon(Icons.timer_outlined, size: 15, color: _timerColor),
               const SizedBox(width: 6),
               const Text(
-                'Jawab dene ka waqt',
+                'Time to respond',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -387,7 +380,7 @@ class _ProviderNotificationScreenState
           ),
           const SizedBox(height: 8),
           Text(
-            'Waqt khatam hone par request apne aap decline ho jaye gi',
+            'The request will auto-decline when the timer expires',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
         ],
@@ -513,7 +506,7 @@ class _ProviderNotificationScreenState
                         Icon(Icons.location_on, color: Colors.amber.shade800, size: 16),
                         const SizedBox(width: 6),
                         Text(
-                          'Yahan Jana Hai:',
+                          'Location to Visit:',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
@@ -582,7 +575,7 @@ class _ProviderNotificationScreenState
                   Icon(Icons.warning_rounded, color: Colors.red.shade700, size: 16),
                   const SizedBox(width: 6),
                   Text(
-                    'ZAROORI — Sirf Yahi Kaam Karo',
+                    'IMPORTANT — Agreed Scope Only',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
@@ -594,8 +587,8 @@ class _ProviderNotificationScreenState
               const SizedBox(height: 6),
               Text(
                 serviceDetails != null && serviceDetails.isNotEmpty
-                    ? 'Is booking mein sirf yeh kaam hai: "$serviceDetails"\n\nAgar aap ne is ke alawa koi bhi extra kaam kiya, to client us ka extra amount dene ka paband nahi — woh aapki apni zimmedari hogi.'
-                    : 'Is booking mein sirf "$serviceType" ka kaam hai.\n\nAgar aap ne is ke alawa koi bhi extra kaam kiya, to client extra amount dene ka paband nahi — woh aapki apni zimmedari hogi.',
+                    ? 'This booking covers only: "$serviceDetails"\n\nIf you do any extra work beyond this, the client is not obligated to pay for it — that will be your own responsibility.'
+                    : 'This booking covers "$serviceType" only.\n\nIf you do any extra work beyond this scope, the client is not obligated to pay for it — that will be your own responsibility.',
                 style: TextStyle(fontSize: 12, color: Colors.red.shade700, height: 1.5),
               ),
             ],
@@ -619,7 +612,7 @@ class _ProviderNotificationScreenState
                   Icon(Icons.gavel_rounded, color: Colors.red.shade700, size: 16),
                   const SizedBox(width: 6),
                   Text(
-                    'ZAROORI — Dispute ke Nataij',
+                    'IMPORTANT — Dispute Consequences',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
@@ -630,7 +623,7 @@ class _ProviderNotificationScreenState
               ),
               const SizedBox(height: 6),
               Text(
-                'Agar client dispute file kare aur team ki review ke baad aap haar jayen to:\n• Aapki profile suspend ya delete ho sakti hai\n• Rating aur cancellation rate affect hoga\n• Platform se remove bhi ho sakte hain',
+                'If a client files a dispute and you lose after review:\n• Your profile may be suspended or deleted\n• Your rating and cancellation rate will be affected\n• You may be removed from the platform',
                 style: TextStyle(fontSize: 12, color: Colors.red.shade700, height: 1.4),
               ),
             ],
@@ -648,7 +641,7 @@ class _ProviderNotificationScreenState
         icon: const Icon(Icons.check_circle_outline,
             color: Colors.white, size: 20),
         label: const Text(
-          'Accept Karo',
+          'Accept',
           style: TextStyle(
               color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
         ),
@@ -670,7 +663,7 @@ class _ProviderNotificationScreenState
         onPressed: _showDeclinePanel,
         icon: Icon(Icons.cancel_outlined, color: Colors.red.shade600, size: 20),
         label: Text(
-          'Decline Karo',
+          'Decline',
           style: TextStyle(
               color: Colors.red.shade600,
               fontSize: 16,
@@ -697,7 +690,7 @@ class _ProviderNotificationScreenState
           _buildCountdownCard(),
           const SizedBox(height: 16),
           const Text(
-            'Decline karne ki wajah',
+            'Reason for declining',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -809,7 +802,7 @@ class _ProviderNotificationScreenState
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Decline Confirm',
+                    'Confirm Decline',
                     style: TextStyle(
                         color: Colors.white, fontWeight: FontWeight.w700),
                   ),
@@ -850,7 +843,7 @@ class _ProviderNotificationScreenState
                   Icon(Icons.check_circle, color: Colors.white, size: 52),
                   SizedBox(height: 8),
                   Text(
-                    'Booking Accept Ho Gayi!',
+                    'Booking Accepted!',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -859,7 +852,7 @@ class _ProviderNotificationScreenState
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Customer ko notification bhej di gayi',
+                    'Notification sent to customer',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -953,7 +946,7 @@ class _ProviderNotificationScreenState
           ),
           const SizedBox(height: 20),
           const Text(
-            'Yaqeen karo?',
+            'Are you sure?',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
@@ -972,7 +965,7 @@ class _ProviderNotificationScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Accept ke baad cancel karne se:',
+                  'Cancelling after acceptance will:',
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1071,7 +1064,7 @@ class _ProviderNotificationScreenState
             ),
             const SizedBox(height: 20),
             const Text(
-              'Booking Cancel Ho Gayi',
+              'Booking Cancelled',
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -1079,7 +1072,7 @@ class _ProviderNotificationScreenState
             ),
             const SizedBox(height: 10),
             const Text(
-              'Customer ko doosra provider dhoondha ja raha hai.',
+              'Finding another provider for the customer.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
             ),
@@ -1099,7 +1092,7 @@ class _ProviderNotificationScreenState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Aapki profile update ho gayi — cancellation rate aur reliability score affect hua',
+                      'Your profile has been updated — cancellation rate and reliability score are affected',
                       style: TextStyle(
                           fontSize: 12, color: Colors.orange.shade900),
                     ),
@@ -1156,7 +1149,7 @@ class _ProviderNotificationScreenState
             ),
             const SizedBox(height: 20),
             const Text(
-              'Waqt Khatam Ho Gaya',
+              'Time Expired',
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -1164,7 +1157,7 @@ class _ProviderNotificationScreenState
             ),
             const SizedBox(height: 10),
             const Text(
-              'Request apne aap decline ho gayi.\nCustomer ko doosra provider dhoondha ja raha hai.',
+              'The request was auto-declined.\nFinding another provider for the customer.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
             ),
@@ -1241,7 +1234,7 @@ class _ProviderNotificationScreenState
             const Icon(Icons.gavel_outlined, color: AppTheme.primary, size: 20),
             const SizedBox(width: 8),
             const Text(
-              'Aapke Disputes',
+              'Your Disputes',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
@@ -1275,7 +1268,7 @@ class _ProviderNotificationScreenState
                 ),
                 child: const Center(
                   child: Text(
-                    'Koi khula dispute nahi hai.',
+                    'No open disputes.',
                     style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
                   ),
                 ),
@@ -1399,7 +1392,7 @@ class _ProviderNotificationScreenState
               const Divider(),
               const SizedBox(height: 8),
               const Text(
-                'Aapka Jawab / Safai:',
+                'Your Response / Statement:',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -1412,7 +1405,7 @@ class _ProviderNotificationScreenState
                 maxLines: 3,
                 style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
                 decoration: InputDecoration(
-                  hintText: 'Apni safai likhein (e.g. Maine kaam sahi kiya tha...)',
+                  hintText: 'Write your response (e.g. I completed the work correctly...)',
                   hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -1421,6 +1414,9 @@ class _ProviderNotificationScreenState
                   contentPadding: const EdgeInsets.all(10),
                 ),
               ),
+              const SizedBox(height: 10),
+              // Evidence photos
+              _buildEvidenceUpload(disputeId),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
@@ -1516,32 +1512,119 @@ class _ProviderNotificationScreenState
     );
   }
 
+  Widget _buildEvidenceUpload(String disputeId) {
+    _disputeEvidence.putIfAbsent(disputeId, () => []);
+    final photos = _disputeEvidence[disputeId]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Evidence Photos (Optional)',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 6),
+        if (photos.isNotEmpty) ...[
+          SizedBox(
+            height: 70,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: photos.length,
+              separatorBuilder: (context, idx) => const SizedBox(width: 6),
+              itemBuilder: (_, i) => Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: kIsWeb
+                        ? Image.network(photos[i].path, width: 70, height: 70, fit: BoxFit.cover)
+                        : Image.file(File(photos[i].path), width: 70, height: 70, fit: BoxFit.cover),
+                  ),
+                  Positioned(
+                    top: 2, right: 2,
+                    child: GestureDetector(
+                      onTap: () => setState(() => photos.removeAt(i)),
+                      child: Container(
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        OutlinedButton.icon(
+          onPressed: () async {
+            final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+            if (img != null) setState(() => _disputeEvidence[disputeId]!.add(img));
+          },
+          icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
+          label: const Text('Photo Add Karein', style: TextStyle(fontSize: 12)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppTheme.primary,
+            side: const BorderSide(color: AppTheme.primary),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<String> _uploadProviderEvidence(XFile xFile) async {
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('disputes/provider_evidence/${DateTime.now().millisecondsSinceEpoch}_${xFile.name}');
+      if (kIsWeb) {
+        final bytes = await xFile.readAsBytes();
+        await ref.putData(bytes);
+      } else {
+        await ref.putFile(File(xFile.path));
+      }
+      return await ref.getDownloadURL();
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _submitProviderResponse(String disputeId) async {
     final responseText = _responseControllers[disputeId]?.text.trim() ?? '';
     if (responseText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Safai / Jawab likhna lazmi hai')),
+        const SnackBar(content: Text('Please write your response before submitting')),
       );
       return;
     }
 
-    setState(() {
-      _submittingDisputes[disputeId] = true;
-    });
+    setState(() => _submittingDisputes[disputeId] = true);
 
     try {
-      // 1. Update Firestore
-      await FirebaseFirestore.instance.collection('disputes').doc(disputeId).update({
+      // Upload provider evidence photos
+      final photos = _disputeEvidence[disputeId] ?? [];
+      final List<String> photoUrls = [];
+      for (final img in photos) {
+        final url = await _uploadProviderEvidence(img);
+        if (url.isNotEmpty) photoUrls.add(url);
+      }
+
+      final updateData = <String, dynamic>{
         'provider_response': responseText,
         'status': 'pending_review',
-      });
+      };
+      if (photoUrls.isNotEmpty) {
+        updateData['provider_evidence_photos'] = photoUrls;
+      }
 
-      // 2. Call backend /dispute/resolve API which runs Gemini AI in Stage 3
-      await ApiService.resolveDispute(disputeId);
+      await FirebaseFirestore.instance.collection('disputes').doc(disputeId).update(updateData);
+
+      // Neutral AI report — email will be sent automatically by backend
+      await ApiService.analyzeDispute(disputeId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Jawab submit ho gaya aur AI resolution run ho gaya!')),
+          const SnackBar(content: Text('Response submitted! AI report is being sent to the team.')),
         );
       }
     } catch (e) {
@@ -1551,11 +1634,7 @@ class _ProviderNotificationScreenState
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _submittingDisputes[disputeId] = false;
-        });
-      }
+      if (mounted) setState(() => _submittingDisputes[disputeId] = false);
     }
   }
 }

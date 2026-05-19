@@ -101,7 +101,7 @@ class _BookingConfirmationScreenState
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Yeh slot abhi kisi ne book kar liya! Alag waqt chunein.',
+                'This slot was just booked by someone else! Please choose a different time.',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               backgroundColor: Colors.orange,
@@ -189,7 +189,7 @@ class _BookingConfirmationScreenState
             Icon(Icons.check_circle, color: Colors.white, size: 56),
             SizedBox(height: 10),
             Text(
-              'Booking Ho Gayi!',
+              'Booking Confirmed!',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 22,
@@ -198,7 +198,7 @@ class _BookingConfirmationScreenState
             ),
             SizedBox(height: 4),
             Text(
-              'Provider ko notification bhej di gayi hai',
+              'Notification sent to provider',
               style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ],
@@ -402,7 +402,7 @@ class _BookingConfirmationScreenState
                   size: 16, color: AppTheme.primary),
               const SizedBox(width: 6),
               const Text(
-                'Appointment mein baki',
+                'Until appointment',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -474,14 +474,14 @@ class _BookingConfirmationScreenState
           _notifRow(
             Icons.chat_outlined,
             'WhatsApp',
-            'Provider aur aapko message bhej diya',
+            'Message sent to provider and customer',
             Colors.green.shade600,
           ),
           const SizedBox(height: 8),
           _notifRow(
             Icons.notifications_outlined,
             'Push Notification',
-            'Provider ka phone buzz ho raha hai',
+            'Provider\'s phone is buzzing',
             Colors.blue.shade600,
           ),
           const SizedBox(height: 8),

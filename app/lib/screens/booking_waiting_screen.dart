@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +12,7 @@ import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
-enum _Phase { waiting, confirmed, declined }
+enum _Phase { waiting, confirmed, declined, rescheduling, noProvider }
 
 class BookingWaitingScreen extends StatefulWidget {
   final String bookingId;
@@ -86,7 +87,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
           _phase == _Phase.waiting) {
         _declineReason = data['declineReason'] as String?;
         setState(() => _phase = _Phase.declined);
-        Future.delayed(const Duration(milliseconds: 1200), _handleDecline);
+        Future.delayed(const Duration(milliseconds: 1500), _handleDecline);
       }
     });
   }
@@ -94,27 +95,80 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
   Future<void> _handleDecline() async {
     if (!mounted) return;
 
+    // Step 1 — find next provider from cached ranked list (no API call needed)
     final allProviders = ApiService.lastDiscoveredProviders;
-    final nextProviderJson = allProviders.firstWhere(
+    final nextJson = allProviders.firstWhere(
       (p) => p['id'] != widget.provider.id,
       orElse: () => <String, dynamic>{},
     );
 
-    if (nextProviderJson.isNotEmpty) {
-      ApiService.pendingPostDeclineAction = {
-        'type': 'show_next',
-        'declined_name': widget.provider.name,
-        'next_provider_json': nextProviderJson,
-      };
-    } else {
-      ApiService.pendingPostDeclineAction = {
-        'type': 'no_provider',
-        'declined_name': widget.provider.name,
-      };
+    if (nextJson.isEmpty) {
+      if (mounted) setState(() => _phase = _Phase.noProvider);
+      return;
     }
 
-    ApiService.triggerReturnToChat();
-    if (mounted) Navigator.popUntil(context, (r) => r.isFirst);
+    setState(() => _phase = _Phase.rescheduling);
+
+    try {
+      final nextProvider = ProviderModel.fromJson(nextJson);
+      final intent = ApiService.lastConfirmedIntent ?? {};
+
+      // Step 2 — pricing: try API with timeout, fallback to local calc
+      PricingModel pricing;
+      try {
+        final pr = await ApiService.getPricing(nextJson, intent, false)
+            .timeout(const Duration(seconds: 8));
+        pricing = PricingModel.fromJson(pr);
+      } catch (_) {
+        pricing = PricingModel.fromProvider(nextProvider);
+      }
+
+      if (!mounted) return;
+
+      // Step 3 — create booking in backend store + send FCM to new provider
+      final resp = await ApiService.rescheduleBooking(
+        declinedBookingId: widget.bookingId,
+        nextProvider: nextJson,
+        intent: intent,
+        pricing: {'total': pricing.total, 'base_rate': pricing.baseRate},
+        allRankedProviders: allProviders,
+      ).timeout(const Duration(seconds: 10));
+
+      if (!mounted) return;
+
+      final newBookingId = resp['booking_id'] as String? ??
+          'BK-${const Uuid().v4().substring(0, 8).toUpperCase()}';
+
+      // Step 4 — Firestore entry so real-time stream works on the new screen
+      await BookingFirestoreService.createBookingAtomically(
+        bookingId: newBookingId,
+        providerId: nextProvider.id,
+        providerName: nextProvider.name,
+        serviceType: intent['service_type'] as String? ?? nextProvider.serviceTypes.first,
+        area: nextProvider.area,
+        amount: pricing.total,
+        datetime: intent['datetime'] as String? ??
+            DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+        serviceDetails: intent['service_details'] as String?,
+      );
+
+      if (!mounted) return;
+
+      // Step 5 — navigate to new waiting screen (replaces current screen)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingWaitingScreen(
+            bookingId: newBookingId,
+            providerId: nextProvider.id,
+            provider: nextProvider,
+            pricing: pricing,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) setState(() => _phase = _Phase.noProvider);
+    }
   }
 
   @override
@@ -154,15 +208,19 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
   }
 
   String get _appBarTitle => switch (_phase) {
-    _Phase.waiting => 'Request Bheji Ja Rahi Hai',
-    _Phase.confirmed => 'Booking Confirm!',
-    _Phase.declined => 'Provider Busy — Wapas Ja Raha Hun',
+    _Phase.waiting      => 'Sending Request',
+    _Phase.confirmed    => 'Booking Confirmed!',
+    _Phase.declined     => 'Provider Busy',
+    _Phase.rescheduling => 'Finding Another Provider',
+    _Phase.noProvider   => 'No Provider Found',
   };
 
   Widget _buildBody() => switch (_phase) {
-    _Phase.waiting => _buildWaiting(),
-    _Phase.confirmed => _buildConfirmed(),
-    _Phase.declined => _buildDeclined(),
+    _Phase.waiting      => _buildWaiting(),
+    _Phase.confirmed    => _buildConfirmed(),
+    _Phase.declined     => _buildDeclined(),
+    _Phase.rescheduling => _buildRescheduling(),
+    _Phase.noProvider   => _buildNoProvider(),
   };
 
   // ─────────────────────────── WAITING ───────────────────────────
@@ -206,7 +264,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
             ),
             const SizedBox(height: 6),
             const Text(
-              'Ko request bheji ja rahi hai...',
+              'Sending request to...',
               style: TextStyle(fontSize: 15, color: AppTheme.textGrey),
             ),
             const SizedBox(height: 4),
@@ -223,7 +281,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
             const SizedBox(height: 20),
             _infoTile(
               Icons.send_outlined,
-              'Request provider ko bhej di gayi hai. Agar unka app khula hai to foran dekhenge.',
+              'Request has been sent to the provider. They will see it immediately if their app is open.',
               Colors.blue.shade600,
               Colors.blue.shade50,
             ),
@@ -237,7 +295,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
             const SizedBox(height: 10),
             _infoTile(
               Icons.auto_awesome,
-              'Agar provider respond na kare to apne aap next best provider select ho jayega.',
+              'If the provider does not respond, the next best provider will be selected automatically.',
               Colors.purple.shade600,
               Colors.purple.shade50,
             ),
@@ -252,9 +310,9 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     final bookingTime = now.add(const Duration(days: 1));
     final hoursUntil = bookingTime.difference(now).inHours;
     if (hoursUntil <= 3) {
-      return 'Urgent booking — provider ko 30 minute mein jawab dena hoga.';
+      return 'Urgent booking — provider must respond within 30 minutes.';
     }
-    return 'Provider ko 1 ghante mein jawab dena hoga. Agar response na aye tu apne aap next provider select ho jayega.';
+    return 'Provider must respond within 1 hour. If no response, the next provider will be selected automatically.';
   }
 
   // ─────────────────────────── CONFIRMED ───────────────────────────
@@ -278,7 +336,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                   Icon(Icons.check_circle, color: Colors.white, size: 64),
                   SizedBox(height: 12),
                   Text(
-                    'Booking Confirm Ho Gayi!',
+                    'Booking Confirmed!',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 22,
@@ -287,7 +345,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Provider ne accept kar liya',
+                    'Provider accepted your booking',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -315,7 +373,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
               ),
               icon: const Icon(Icons.track_changes_outlined, color: Colors.white, size: 20),
               label: const Text(
-                'Kaam Track Karo',
+                'Track Job',
                 style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
               ),
               style: ElevatedButton.styleFrom(
@@ -336,7 +394,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text('Home Jao', style: TextStyle(color: AppTheme.textGrey)),
+              child: const Text('Go Home', style: TextStyle(color: AppTheme.textGrey)),
             ),
           ),
         ],
@@ -365,7 +423,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
             ),
             const SizedBox(height: 20),
             Text(
-              '${widget.provider.name} Busy Hai',
+              '${widget.provider.name} is Busy',
               style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -390,7 +448,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
             const SizedBox(height: 20),
             _infoTile(
               Icons.autorenew,
-              'Doosra provider dhundh raha hun...',
+              'Finding another provider...',
               Colors.blue.shade600,
               Colors.blue.shade50,
             ),
@@ -400,6 +458,118 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     );
   }
 
+
+  // ─────────────────────────── RESCHEDULING ───────────────────────────
+  Widget _buildRescheduling() {
+    return Center(
+      key: const ValueKey('rescheduling'),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Finding Another Provider',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'After ${widget.provider.name}, sending request to the next best provider...',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppTheme.textGrey),
+            ),
+            const SizedBox(height: 20),
+            _infoTile(
+              Icons.auto_awesome,
+              'Agent is automatically selecting the next provider from the ranked list',
+              Colors.purple.shade600,
+              Colors.purple.shade50,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────── NO PROVIDER ───────────────────────────
+  Widget _buildNoProvider() {
+    return Center(
+      key: const ValueKey('noProvider'),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.sentiment_dissatisfied_outlined,
+                  size: 44, color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No Other Provider Found',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'No other provider is available in your area right now.\nPlease try again later.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppTheme.textGrey, height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Home Jao',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ─────────────────────────── SHARED WIDGETS ───────────────────────────
   Widget _bookingDetailsCard({
@@ -522,7 +692,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                           Clipboard.setData(ClipboardData(text: bookingId));
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Booking ID copy ho gaya!'),
+                              content: Text('Booking ID copied!'),
                               duration: Duration(seconds: 2),
                             ),
                           );
@@ -545,8 +715,8 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                 _row(Icons.payments_outlined, 'Amount', 'Rs. ${pricing.total}',
                     valueColor: AppTheme.primary, bold: true),
                 _divider(),
-                _row(Icons.access_time_outlined, 'Waqt',
-                    'Kal 10:00 AM (confirm)'),
+                _row(Icons.access_time_outlined, 'Time',
+                    'Tomorrow 10:00 AM (confirm)'),
               ],
             ),
           ),
