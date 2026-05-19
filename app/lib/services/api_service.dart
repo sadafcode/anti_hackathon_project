@@ -6,7 +6,7 @@ import 'package:uuid/uuid.dart';
 class ApiService {
   // kIsWeb = Chrome/web uses localhost; Android emulator uses 10.0.2.2
   static String get baseUrl =>
-      kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
+      kIsWeb ? 'http://localhost:3000/api' : 'https://khidmatbot-backend-251161399989.us-central1.run.app/api';
   static String sessionId = const Uuid().v4();
 
   // Accumulate Agent Traces globally across the entire UI flow

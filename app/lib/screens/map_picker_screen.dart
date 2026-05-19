@@ -96,7 +96,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 450), () async {
-      final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
+      final baseUrl = kIsWeb ? 'http://localhost:3000' : 'https://khidmatbot-backend-251161399989.us-central1.run.app';
       final url = Uri.parse(
         '$baseUrl/api/places/autocomplete'
         '?input=${Uri.encodeComponent(query)}',
@@ -133,7 +133,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     FocusScope.of(context).unfocus();
 
     // Forward-geocode to get LatLng for the selected suggestion via proxy
-    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
+    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'https://khidmatbot-backend-251161399989.us-central1.run.app';
     final url = Uri.parse(
       '$baseUrl/api/places/geocode'
       '?address=${Uri.encodeComponent(desc)}',
@@ -168,7 +168,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     });
     FocusScope.of(context).unfocus();
 
-    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
+    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'https://khidmatbot-backend-251161399989.us-central1.run.app';
     final url = Uri.parse(
       '$baseUrl/api/places/geocode'
       '?address=${Uri.encodeComponent(query)}',
@@ -243,7 +243,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     if (_isGeocoding) return;
     setState(() => _isGeocoding = true);
     
-    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
+    final baseUrl = kIsWeb ? 'http://localhost:3000' : 'https://khidmatbot-backend-251161399989.us-central1.run.app';
     final url = Uri.parse(
       '$baseUrl/api/places/geocode'
       '?latlng=${pos.latitude},${pos.longitude}',

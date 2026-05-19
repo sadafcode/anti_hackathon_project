@@ -1,0 +1,9 @@
+node_modules
+.env
+serviceAccountKey.json
+app/
+dist/
+antigravity_artifact/
+antigravity_traces/
+*.md
+.git
