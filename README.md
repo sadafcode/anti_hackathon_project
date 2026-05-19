@@ -1,4 +1,4 @@
-# KhidmatBot — AI Service Orchestrator for Pakistan's Informal Economy
+# KhidmatBot  AI Service Orchestrator for Pakistan's Informal Economy
 
 > Google Antigravity Hackathon — Challenge 2: AI Service Orchestrator for Informal Economy
 
@@ -8,7 +8,7 @@
 
 Most hackathon projects ship a demo. We built a real, production-ready platform.
 
-Any service provider — plumber, electrician, AC technician, tutor — anywhere in Pakistan can open the app, register with their NIC card, and start receiving AI-matched bookings immediately. The 8 providers in the seed dataset are demo data; every new real registration is treated identically by all 7 agents and all 13 ranking factors.
+Any service provider  plumber, electrician, AC technician, tutor  anywhere in Pakistan can open the app, register with their NIC card, and start receiving AI-matched bookings immediately. The 8 providers in the seed dataset are demo data; every new real registration is treated identically by all 7 agents and all 13 ranking factors.
 
 **Three things we built beyond the challenge prompt:**
 
