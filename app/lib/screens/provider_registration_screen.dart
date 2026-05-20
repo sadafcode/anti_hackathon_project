@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/phone_auth_service.dart';
 import '../services/provider_session.dart';
+import '../services/test_mode_service.dart';
 import 'nic_scanner_screen.dart';
 
 class ProviderRegistrationScreen extends StatefulWidget {
@@ -110,7 +111,7 @@ class _ProviderRegistrationScreenState
   ];
 
   static const List<String> _timeSlots = [
-    'Pura Din', '8am–12pm', '12pm–4pm', '4pm–8pm', 'Evening',
+    'Full Day', '8am–12pm', '12pm–4pm', '4pm–8pm', 'Evening',
   ];
 
   @override
@@ -144,7 +145,7 @@ class _ProviderRegistrationScreenState
   // ── Phone OTP ──────────────────────────────────────────────────
   Future<void> _sendOtp() async {
     final phone = _phoneCtrl.text.trim();
-    if (phone.isEmpty) { _showSnack('Phone number daalein'); return; }
+    if (phone.isEmpty) { _showSnack('Enter phone number'); return; }
     setState(() => _sendingOtp = true);
     final error = await PhoneAuthService.sendOtp(phone);
     setState(() => _sendingOtp = false);
@@ -160,12 +161,12 @@ class _ProviderRegistrationScreenState
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('OTP Darj Karein', style: TextStyle(fontWeight: FontWeight.w700)),
+          title: const Text('Enter OTP', style: TextStyle(fontWeight: FontWeight.w700)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'SMS gaya: ${_phoneCtrl.text.trim()}',
+                'SMS sent to: ${_phoneCtrl.text.trim()}',
                 style: const TextStyle(fontSize: 12, color: AppTheme.textGrey),
               ),
               const SizedBox(height: 20),
@@ -310,7 +311,7 @@ class _ProviderRegistrationScreenState
     }
     if (_selectedServices.isEmpty) return;
     if (_selectedArea == null) {
-      _showSnack('Area chunein');
+      _showSnack('Please select an area');
       return;
     }
 
@@ -319,7 +320,7 @@ class _ProviderRegistrationScreenState
         .map((e) => e.key)
         .toList();
     if (incompleteDay.isNotEmpty) {
-      _showSnack('${incompleteDay.join(', ')} ke liye time slot zaroor chunein');
+      _showSnack('Please select a time slot for ${incompleteDay.join(', ')}');
       return;
     }
 
@@ -395,6 +396,27 @@ class _ProviderRegistrationScreenState
     );
   }
 
+  void _fillDemoData() {
+    final data = TestModeService.mockProviderData;
+    setState(() {
+      _nameCtrl.text = data['name'] as String;
+      _phoneCtrl.text = data['phone'] as String;
+      _nicCtrl.text = data['nic'] as String;
+      _expCtrl.text = data['experience'] as String;
+      _rateBasicCtrl.text = data['rateBasic'] as String;
+      _rateIntermediateCtrl.text = data['rateIntermediate'] as String;
+      _rateComplexCtrl.text = data['rateComplex'] as String;
+      _certCtrl.text = data['certifications'] as String;
+      _selectedArea = data['area'] as String;
+      _selectedServices.clear();
+      _selectedServices.addAll(['AC Tech', 'Electrician']);
+      _selectedTools.clear();
+      _selectedTools.addAll(['Multimeter', 'Drill', 'Gas Kit']);
+      _phoneVerified = true; // skip OTP for demo
+      _useAvatar = true;
+    });
+  }
+
   Widget _buildForm() {
     return Form(
       key: _formKey,
@@ -404,6 +426,50 @@ class _ProviderRegistrationScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Demo mode banner + fill button
+            if (TestModeService.isEnabled) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.science_rounded, size: 14, color: Colors.amber.shade800),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Judge Demo Mode',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.amber.shade900),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _fillDemoData,
+                        icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                        label: const Text('Fill Demo Data', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             _buildSectionHeader('Profile Photo', Icons.camera_alt_outlined),
             const SizedBox(height: 10),
             _buildPhotoUpload(),
@@ -412,7 +478,7 @@ class _ProviderRegistrationScreenState
             _buildSectionHeader('Basic Info', Icons.person_outline),
             const SizedBox(height: 10),
             _buildCard([
-              _buildTextField(_nameCtrl, 'Pura Naam *', Icons.badge_outlined,
+              _buildTextField(_nameCtrl, 'Full Name *', Icons.badge_outlined,
                   validator: _requiredValidator),
               const SizedBox(height: 12),
 
@@ -426,7 +492,7 @@ class _ProviderRegistrationScreenState
                 readOnly: _phoneVerified,
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Required';
-                  if (v.trim().length < 10) return 'Valid number dein';
+                  if (v.trim().length < 10) return 'Enter a valid number';
                   return null;
                 },
               ),
@@ -474,7 +540,7 @@ class _ProviderRegistrationScreenState
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        'Firebase SMS OTP integrated — demo ke liye test numbers use karein',
+                        'Firebase SMS OTP integrated — use test numbers for demo',
                         style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                       ),
                     ],
@@ -488,7 +554,7 @@ class _ProviderRegistrationScreenState
                       const Icon(Icons.error_outline, size: 13, color: Colors.red),
                       const SizedBox(width: 4),
                       Text(
-                        'Phone number verify karna zaroori hai',
+                        'Phone verification is required',
                         style: TextStyle(fontSize: 11, color: Colors.red.shade600),
                       ),
                     ],
@@ -505,7 +571,7 @@ class _ProviderRegistrationScreenState
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.sms_outlined, size: 16, color: Colors.white),
                         label: Text(
-                          _sendingOtp ? 'SMS ja raha hai...' : 'OTP Bhejo (Zaroori)',
+                          _sendingOtp ? 'Sending SMS...' : 'Send OTP (Required)',
                           style: const TextStyle(color: Colors.white, fontSize: 13),
                         ),
                         style: ElevatedButton.styleFrom(
@@ -617,7 +683,7 @@ class _ProviderRegistrationScreenState
                   children: [
                     const Icon(Icons.error_outline, size: 13, color: Colors.red),
                     const SizedBox(width: 4),
-                    Text('Kam az kam ek service chunein',
+                    Text('Select at least one service',
                         style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
                   ],
                 ),
@@ -631,7 +697,7 @@ class _ProviderRegistrationScreenState
               const SizedBox(height: 12),
               _buildTextField(
                 _expCtrl,
-                'Tajurba (saal) *',
+                'Experience (years) *',
                 Icons.workspace_premium_outlined,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -640,12 +706,12 @@ class _ProviderRegistrationScreenState
             ]),
             const SizedBox(height: 20),
 
-            _buildSectionHeader('Apni Rates Likho', Icons.payments_outlined),
+            _buildSectionHeader('Set Your Rates', Icons.payments_outlined),
             const SizedBox(height: 10),
             _buildCard([
               _buildTextField(
                 _rateBasicCtrl,
-                'Basic Kaam (Rs.) *',
+                'Basic Work (Rs.) *',
                 Icons.payments_outlined,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -655,7 +721,7 @@ class _ProviderRegistrationScreenState
               const SizedBox(height: 12),
               _buildTextField(
                 _rateIntermediateCtrl,
-                'Intermediate Kaam (Rs.) *',
+                'Intermediate Work (Rs.) *',
                 Icons.payments_outlined,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -665,7 +731,7 @@ class _ProviderRegistrationScreenState
               const SizedBox(height: 12),
               _buildTextField(
                 _rateComplexCtrl,
-                'Complex Kaam (Rs.) *',
+                'Complex Work (Rs.) *',
                 Icons.payments_outlined,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -685,7 +751,7 @@ class _ProviderRegistrationScreenState
                 _certCtrl,
                 'Certifications',
                 Icons.verified_outlined,
-                helperText: 'misaal: AC Technician Diploma, Wiring Certificate',
+                helperText: 'Example: AC Technician Diploma, Wiring Certificate',
               ),
             ]),
             const SizedBox(height: 20),
@@ -700,7 +766,7 @@ class _ProviderRegistrationScreenState
                   children: [
                     const Icon(Icons.error_outline, size: 13, color: Colors.red),
                     const SizedBox(width: 4),
-                    Text('Kam az kam ek din aur time slot chunein',
+                    Text('Select at least one day and time slot',
                         style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
                   ],
                 ),
@@ -811,8 +877,8 @@ class _ProviderRegistrationScreenState
             Expanded(
               child: _buildPhotoOptionButton(
                 icon: Icons.account_circle_outlined,
-                label: 'Avatar Use Karo',
-                sublabel: 'Naam se automatic',
+                label: 'Use Avatar',
+                sublabel: 'Auto from name',
                 selected: _useAvatar,
                 onTap: () => setState(() {
                   _useAvatar = true;
@@ -967,7 +1033,7 @@ class _ProviderRegistrationScreenState
               ListTile(
                 leading: const Icon(Icons.camera_alt_outlined,
                     color: AppTheme.primary),
-                title: const Text('Camera se lo'),
+                title: const Text('Take from camera'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickPhoto(ImageSource.camera);
@@ -976,7 +1042,7 @@ class _ProviderRegistrationScreenState
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined,
                     color: AppTheme.primary),
-                title: const Text('Gallery se lo'),
+                title: const Text('Take from gallery'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickPhoto(ImageSource.gallery);
@@ -986,7 +1052,7 @@ class _ProviderRegistrationScreenState
                 ListTile(
                   leading: Icon(Icons.delete_outline,
                       color: Colors.red.shade600),
-                  title: Text('Photo hatao',
+                  title: Text('Remove photo',
                       style: TextStyle(color: Colors.red.shade600)),
                   onTap: () {
                     Navigator.pop(context);
@@ -1146,7 +1212,7 @@ class _ProviderRegistrationScreenState
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                _selectedArea ?? 'City / Area chunein *',
+                _selectedArea ?? 'City / Area *',
                 style: TextStyle(
                   fontSize: 13,
                   color: _selectedArea != null ? AppTheme.textDark : AppTheme.textGrey,
@@ -1249,7 +1315,7 @@ class _ProviderRegistrationScreenState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Din aur time slots chunein',
+                'Select days and time slots',
                 style: TextStyle(fontSize: 12, color: AppTheme.textGrey),
               ),
               GestureDetector(
@@ -1258,7 +1324,7 @@ class _ProviderRegistrationScreenState
                     _availability.clear();
                   } else {
                     for (final d in _weekDays) {
-                      _availability[d] = {'Pura Din'};
+                      _availability[d] = {'Full Day'};
                     }
                   }
                 }),
@@ -1273,7 +1339,7 @@ class _ProviderRegistrationScreenState
                     ),
                   ),
                   child: Text(
-                    allDaysSelected ? 'Sab hatao' : 'Saare Din',
+                    allDaysSelected ? 'Clear All' : 'All Days',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -1351,15 +1417,15 @@ class _ProviderRegistrationScreenState
                               runSpacing: 4,
                               children: _timeSlots.map((slot) {
                                 final slotSelected = slots.contains(slot);
-                                final isPuraDin = slot == 'Pura Din';
+                                final isPuraDin = slot == 'Full Day';
                                 return GestureDetector(
                                   onTap: () => setState(() {
                                     if (isPuraDin) {
                                       if (slotSelected) {
-                                        slots.remove('Pura Din');
+                                        slots.remove('Full Day');
                                       } else {
                                         slots.clear();
-                                        slots.add('Pura Din');
+                                        slots.add('Full Day');
                                       }
                                     } else {
                                       slots.remove('Pura Din');
@@ -1428,16 +1494,16 @@ class _ProviderRegistrationScreenState
 
   Widget _buildValidationSummary() {
     final errors = <String>[];
-    if (_nameCtrl.text.trim().isEmpty) errors.add('Pura naam likho');
+    if (_nameCtrl.text.trim().isEmpty) errors.add('Enter full name');
     if (!_phoneVerified) errors.add('Verify your phone number');
-    if (_selectedServices.isEmpty) errors.add('Kam az kam ek service chuno');
-    if (_selectedArea == null) errors.add('Area chuno');
+    if (_selectedServices.isEmpty) errors.add('Select at least one service');
+    if (_selectedArea == null) errors.add('Select an area');
     if (_availability.isEmpty) errors.add('Select at least one availability day');
     final incompleteDay = _availability.entries
         .where((e) => e.value.isEmpty)
         .map((e) => e.key)
         .join(', ');
-    if (incompleteDay.isNotEmpty) errors.add('$incompleteDay ka time slot chuno');
+    if (incompleteDay.isNotEmpty) errors.add('Select time slot for $incompleteDay');
 
     if (errors.isEmpty) return const SizedBox.shrink();
 
@@ -1493,7 +1559,7 @@ class _ProviderRegistrationScreenState
         icon: const Icon(Icons.how_to_reg_outlined,
             color: Colors.white, size: 20),
         label: const Text(
-          'Register Karo',
+          'Register Now',
           style: TextStyle(
             color: Colors.white,
             fontSize: 16,
@@ -1520,8 +1586,8 @@ class _ProviderRegistrationScreenState
           const SizedBox(height: 20),
           Text(
             _nicCtrl.text.trim().isNotEmpty
-                ? 'NADRA se verify ho raha hai...'
-                : 'Profile save ho rahi hai...',
+                ? 'Verifying with NADRA...'
+                : 'Saving profile...',
             style: const TextStyle(
                 fontSize: 14, color: AppTheme.textGrey),
           ),
@@ -1533,9 +1599,9 @@ class _ProviderRegistrationScreenState
   Widget _buildSuccessView(BuildContext context) {
     final nicProvided = _nicCtrl.text.trim().isNotEmpty;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Center(
         child: ScaleTransition(
           scale: _successScale,
           child: Column(
@@ -1603,7 +1669,7 @@ class _ProviderRegistrationScreenState
               if (nicProvided && _nadraVerified)
                 _buildStatusChip(
                   Icons.verified,
-                  'NADRA Verified — Blue Tick Mil Gaya',
+                  'NADRA Verified — Blue Tick Awarded',
                   Colors.blue,
                 )
               else if (nicProvided && !_nadraVerified)
@@ -1668,7 +1734,7 @@ class _ProviderRegistrationScreenState
                   child: Column(
                     children: [
                       const Text(
-                        'Aapka Provider ID',
+                        'Your Provider ID',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textGrey,
@@ -1730,7 +1796,7 @@ class _ProviderRegistrationScreenState
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Yeh ID note kar lein — notifications bhi is ID se aayenge',
+                        'Note this ID — notifications will use this ID',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 11, color: AppTheme.textGrey),
                       ),
@@ -1752,7 +1818,7 @@ class _ProviderRegistrationScreenState
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Home Jao',
+                    'Go Home',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1795,7 +1861,7 @@ class _ProviderRegistrationScreenState
   }
 
   String? _requiredValidator(String? v) {
-    if (v == null || v.trim().isEmpty) return 'Yeh field zaruri hai';
+    if (v == null || v.trim().isEmpty) return 'This field is required';
     return null;
   }
 }
@@ -1898,7 +1964,7 @@ class _AreaSearchSheetState extends State<_AreaSearchSheet> {
               autofocus: true,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Pakistan ka koi bhi shehar ya area likho...',
+                hintText: 'Enter any city or area in Pakistan...',
                 hintStyle: const TextStyle(fontSize: 13, color: AppTheme.textGrey),
                 prefixIcon: const Icon(Icons.search, size: 18, color: AppTheme.primary),
                 suffixIcon: _loading
@@ -1940,7 +2006,7 @@ class _AreaSearchSheetState extends State<_AreaSearchSheet> {
                         Icon(Icons.location_city_outlined, size: 48, color: Colors.grey.shade300),
                         const SizedBox(height: 8),
                         const Text(
-                          'Koi bhi shehar ya mohalla likho',
+                          'Enter any city or neighbourhood',
                           style: TextStyle(color: AppTheme.textGrey, fontSize: 13),
                         ),
                         const Text(

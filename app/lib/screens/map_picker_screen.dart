@@ -29,6 +29,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   // Search state
   final TextEditingController _searchCtrl = TextEditingController();
+  final TextEditingController _houseCtrl = TextEditingController();
   List<Map<String, String>> _suggestions = [];
   bool _showSuggestions = false;
   Timer? _debounce;
@@ -53,7 +54,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('GPS access nahi mila. Upar ilaka type karein ya map drag karein.'),
+          content: Text('GPS access denied. Type your area above or drag the map.'),
           duration: Duration(seconds: 4),
           behavior: SnackBarBehavior.floating,
         ),
@@ -65,6 +66,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   void dispose() {
     _mapController?.dispose();
     _searchCtrl.dispose();
+    _houseCtrl.dispose();
     _debounce?.cancel();
     super.dispose();
   }
@@ -263,28 +265,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final results = data['results'] as List? ?? [];
         if (results.isNotEmpty) {
-          final comps = results[0]['address_components'] as List? ?? [];
-          String? area;
-          String? city;
-          for (final c in comps) {
-            final types = (c['types'] as List).cast<String>();
-            final name = c['long_name'] as String;
-            if (area == null &&
-                (types.contains('sublocality_level_1') ||
-                    types.contains('neighborhood') ||
-                    types.contains('sublocality'))) {
-              area = name;
-            }
-            if (city == null && types.contains('locality')) {
-              city = name;
-            }
-          }
-          final address = (area != null && city != null)
-              ? '$area, $city'
-              : city ??
-                  (results[0]['formatted_address'] as String? ??
-                      'Location not found');
-          setState(() => _selectedAddress = address);
+          final formatted = results[0]['formatted_address'] as String? ?? '';
+          final cleaned = _cleanAddress(formatted);
+          setState(() => _selectedAddress = cleaned.isNotEmpty ? cleaned : 'Location not found');
         } else {
           setState(() => _selectedAddress = 'Location not found');
         }
@@ -307,13 +290,27 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     });
   }
 
-  void _confirmLocation() => Navigator.pop(context, _selectedAddress);
+  // Remove country + province suffix from Google formatted_address
+  String _cleanAddress(String raw) {
+    final parts = raw.split(', ');
+    // Remove last 2 parts (country + province) if more than 2 parts remain
+    if (parts.length > 3) {
+      return parts.sublist(0, parts.length - 2).join(', ');
+    }
+    return raw;
+  }
+
+  void _confirmLocation() {
+    final house = _houseCtrl.text.trim();
+    final full = house.isEmpty ? _selectedAddress : '$house, $_selectedAddress';
+    Navigator.pop(context, full);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Location Chunein'),
+        title: const Text('Choose Location'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -400,7 +397,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                     style: const TextStyle(fontSize: 14),
                     decoration: InputDecoration(
                       hintText:
-                          'Ilaka likhein — Korangi Karachi, Gulberg Lahore...',
+                          'Type area — Korangi Karachi, Gulberg Lahore...',
                       hintStyle: const TextStyle(
                           fontSize: 13, color: AppTheme.textGrey),
                       prefixIcon: const Icon(
@@ -542,6 +539,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               address: _selectedAddress,
               isMoving: _isMoving || _isGeocoding,
               onConfirm: _confirmLocation,
+              houseCtrl: _houseCtrl,
             ),
           ),
         ],
@@ -561,11 +559,13 @@ class _BottomCard extends StatelessWidget {
   final String address;
   final bool isMoving;
   final VoidCallback onConfirm;
+  final TextEditingController houseCtrl;
 
   const _BottomCard({
     required this.address,
     required this.isMoving,
     required this.onConfirm,
+    required this.houseCtrl,
   });
 
   @override
@@ -596,7 +596,7 @@ class _BottomCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          const Text('Chunida Location',
+          const Text('Selected Location',
               style: TextStyle(fontSize: 12, color: AppTheme.textGrey)),
           const SizedBox(height: 6),
           Row(
@@ -608,10 +608,10 @@ class _BottomCard extends StatelessWidget {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: Text(
-                    isMoving ? 'Location dhundh raha hoon...' : address,
+                    isMoving ? 'Finding location...' : address,
                     key: ValueKey(isMoving ? 'moving' : address),
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: isMoving ? AppTheme.textGrey : AppTheme.textDark,
                     ),
@@ -620,12 +620,37 @@ class _BottomCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          // House / street detail field
+          TextField(
+            controller: houseCtrl,
+            style: const TextStyle(fontSize: 13),
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              hintText: 'House/Flat No., Street (optional)',
+              hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+              prefixIcon: const Icon(Icons.home_outlined, size: 18, color: AppTheme.primary),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+              ),
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
-            'Map drag karein ya upar ilaka type karein',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            'Drag map or type area above • Add house/flat details here',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -641,7 +666,7 @@ class _BottomCard extends StatelessWidget {
               icon: Icon(Icons.check_circle_outline,
                   color: isMoving ? Colors.grey : Colors.white, size: 18),
               label: Text(
-                'Confirm Karo',
+                'Confirm Location',
                 style: TextStyle(
                   color: isMoving ? Colors.grey : Colors.white,
                   fontSize: 15,

@@ -10,6 +10,7 @@ import 'service_tracking_screen.dart';
 import '../models/pricing_model.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
+import '../services/test_mode_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 enum _Phase { waiting, confirmed, declined, rescheduling, noProvider }
@@ -69,6 +70,9 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
     );
 
     _listenToBooking();
+    if (TestModeService.isEnabled) {
+      TestModeService.simulateProviderAccept(widget.bookingId);
+    }
   }
 
   void _listenToBooking() {
@@ -299,6 +303,15 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
               Colors.purple.shade600,
               Colors.purple.shade50,
             ),
+            if (TestModeService.isEnabled) ...[
+              const SizedBox(height: 10),
+              _infoTile(
+                Icons.science_rounded,
+                'Judge Demo Mode: Provider will auto-accept in ~3 seconds.',
+                Colors.amber.shade800,
+                Colors.amber.shade50,
+              ),
+            ],
           ],
         ),
       ),
@@ -557,7 +570,7 @@ class _BookingWaitingScreenState extends State<BookingWaitingScreen>
                   elevation: 0,
                 ),
                 child: const Text(
-                  'Home Jao',
+                  'Go Home',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,

@@ -470,9 +470,9 @@
     ],
     "nic": "3520165432190",
     "blue_tick": true,
-    "rating": 4.6,
-    "total_reviews": 95,
-    "review_sentiment": "positive",
+    "rating": 4.27,
+    "total_reviews": 123,
+    "review_sentiment": "mostly_positive",
     "experience_years": 7,
     "certifications": [
       "AC Diploma",
@@ -597,8 +597,8 @@
     ],
     "nic": null,
     "blue_tick": false,
-    "rating": 4.3,
-    "total_reviews": 55,
+    "rating": 4.2,
+    "total_reviews": 59,
     "review_sentiment": "mostly_positive",
     "experience_years": 5,
     "certifications": [],
@@ -637,8 +637,8 @@
         "10:00"
       ]
     },
-    "on_time_score": 82,
-    "cancellation_rate": 6,
+    "on_time_score": 72,
+    "cancellation_rate": 7,
     "capacity_today": 3,
     "risk_score": "low",
     "reliability_score": 80,
@@ -1541,9 +1541,9 @@
     "hourly_rate": 300,
     "experience_years": 10,
     "blue_tick": false,
-    "rating": 0,
-    "total_reviews": 0,
-    "review_sentiment": "unrated",
+    "rating": 2,
+    "total_reviews": 2,
+    "review_sentiment": "negative",
     "on_time_score": 100,
     "cancellation_rate": 0,
     "capacity_today": 3,
@@ -1791,5 +1791,41 @@
     "user_preference_score": 0,
     "is_mock": true,
     "registered_at": "2023-03-10T00:00:00Z"
+  },
+  {
+    "id": "PRV-5I0BWK00",
+    "name": "Zafar Khan",
+    "area": "G-13",
+    "service_types": [
+      "ac_repair",
+      "electrician"
+    ],
+    "hourly_rate": 700,
+    "rate_basic": 700,
+    "rate_intermediate": 900,
+    "rate_complex": 1200,
+    "experience_years": 5,
+    "blue_tick": false,
+    "rating": 0,
+    "total_reviews": 0,
+    "review_sentiment": "unrated",
+    "on_time_score": 100,
+    "cancellation_rate": 0,
+    "capacity_today": 3,
+    "risk_score": "low",
+    "strikes": 0,
+    "user_preference_score": 0,
+    "registered_at": "2026-05-20T12:09:12.267Z",
+    "availability": {
+      "monday": [
+        "Full Day"
+      ],
+      "wednesday": [
+        "Full Day"
+      ],
+      "friday": [
+        "Full Day"
+      ]
+    }
   }
 ]

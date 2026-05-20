@@ -10,6 +10,10 @@ COPY backend/ ./backend/
 
 RUN npx tsc --skipLibCheck
 
+# Compiled code (dist/tools/) resolves ../../data → /app/data/
+# backend/data/ is at /app/backend/data/ — copy it to where dist expects it
+RUN cp -r /app/backend/data /app/data
+
 EXPOSE 8080
 
 ENV PORT=8080

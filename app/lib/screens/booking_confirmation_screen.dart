@@ -134,7 +134,7 @@ class _BookingConfirmationScreenState
       '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
-    return 'Kal, ${_appointmentTime.day} ${months[_appointmentTime.month]} ${_appointmentTime.year}';
+    return 'Tomorrow, ${_appointmentTime.day} ${months[_appointmentTime.month]} ${_appointmentTime.year}';
   }
 
   @override
@@ -463,7 +463,7 @@ class _BookingConfirmationScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Notifications Bhej Di Gayi Hain',
+            'Notifications Sent',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -488,7 +488,7 @@ class _BookingConfirmationScreenState
           _notifRow(
             Icons.receipt_outlined,
             'Receipt',
-            'Aapke WhatsApp par receipt aa gayi',
+            'Receipt sent to your WhatsApp',
             Colors.purple.shade600,
           ),
         ],
@@ -574,7 +574,7 @@ class _BookingConfirmationScreenState
           elevation: 0,
         ),
         child: const Text(
-          'Home Jao',
+          'Go Home',
           style: TextStyle(
             color: Colors.white,
             fontSize: 16,
@@ -606,7 +606,7 @@ class _BookingConfirmationScreenState
         },
         icon: const Icon(Icons.live_tv_outlined, color: Colors.white, size: 18),
         label: const Text(
-          'Live Status Dekhein',
+          'View Live Status',
           style: TextStyle(
             color: Colors.white,
             fontSize: 16,
@@ -645,7 +645,7 @@ class _BookingConfirmationScreenState
           padding: const EdgeInsets.symmetric(vertical: 16),
         ),
         child: const Text(
-          'Provider Screen Dekhein (Demo)',
+          'View Provider Screen (Demo)',
           style: TextStyle(
             color: AppTheme.primary,
             fontSize: 16,

@@ -21,14 +21,16 @@ class PhoneAuthService {
   }
 
   static Future<String?> sendOtp(String rawPhone) async {
-    // Chrome/web: Firebase verifyPhoneNumber not supported — use demo bypass
+    // Demo bypass for both web and Android — test numbers always work
+    final clean = rawPhone.replaceAll(RegExp(r'[\s\-()+]'), '');
+    final isTest = _testNumbers.any((t) => t.replaceAll(RegExp(r'[\s\-()+]'), '') == clean);
+    if (isTest) {
+      _webDemoMode = true;
+      return null; // success — OTP "sent"
+    }
+
+    // Chrome/web: Firebase verifyPhoneNumber not supported for non-test numbers
     if (kIsWeb) {
-      final clean = rawPhone.replaceAll(RegExp(r'[\s\-()+]'), '');
-      final isTest = _testNumbers.any((t) => t.replaceAll(RegExp(r'[\s\-()+]'), '') == clean);
-      if (isTest) {
-        _webDemoMode = true;
-        return null; // success — OTP "sent"
-      }
       return 'On Chrome, only test numbers work: 03492083169 or 03100017745';
     }
 
@@ -75,8 +77,8 @@ class PhoneAuthService {
   }
 
   static Future<bool> verifyOtp(String otp) async {
-    // Chrome/web demo bypass
-    if (kIsWeb && _webDemoMode) {
+    // Demo bypass for both web and Android test numbers
+    if (_webDemoMode) {
       return otp == _testOtp;
     }
 

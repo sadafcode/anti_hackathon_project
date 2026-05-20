@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/provider_avatar.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
+import '../services/test_mode_service.dart';
 import 'agent_trace_screen.dart';
 
 class FeedbackScreen extends StatefulWidget {
@@ -99,6 +100,18 @@ class _FeedbackScreenState extends State<FeedbackScreen>
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
 
+    // Test mode: skip API calls, go straight to success
+    if (TestModeService.isEnabled) {
+      setState(() {
+        _isSubmitting = false;
+        _submitted = true;
+        _newRating = widget.provider.rating;
+        _newTotalReviews = widget.provider.totalReviews + 1;
+      });
+      _successController.forward();
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -118,7 +131,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
         stars: _selectedStars,
         reviewText: reviewText,
         clientName: widget.clientName,
-      );
+      ).timeout(const Duration(seconds: 10));
 
       // 2. Save review to Firestore reviews collection (real-time, shown on profile)
       await BookingFirestoreService.submitReview(
@@ -138,7 +151,7 @@ class _FeedbackScreenState extends State<FeedbackScreen>
           'comment': _commentController.text.trim(),
           'tags': _selectedTags.toList(),
         },
-      });
+      }).timeout(const Duration(seconds: 10));
 
       if (mounted) {
         Navigator.pop(context);

@@ -785,7 +785,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: const Text('Wapas Jao',
+                child: const Text('Go Back',
                     style: TextStyle(
                         color: AppTheme.textGrey, fontSize: 15)),
               ),
@@ -849,7 +849,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   elevation: 0,
                 ),
-                child: const Text('Book Karo',
+                child: const Text('Book Now',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 15,

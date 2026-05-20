@@ -296,7 +296,7 @@ class _ServiceTrackingScreenState extends State<ServiceTrackingScreen>
   (String, Color, IconData) _currentStatus() {
     return switch (_phase) {
       0 => (
-          'Booking Confirmed — Intezaar Karein',
+          'Booking Confirmed — Please Wait',
           AppTheme.primary,
           Icons.hourglass_empty_outlined
         ),

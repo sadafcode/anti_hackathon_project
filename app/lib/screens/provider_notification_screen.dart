@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/booking_firestore_service.dart';
+import '../services/test_mode_service.dart';
 
 class ProviderNotificationScreen extends StatefulWidget {
   final String providerId;
@@ -30,8 +31,10 @@ class _ProviderNotificationScreenState
   final Map<String, List<XFile>> _disputeEvidence = {};
   final ImagePicker _picker = ImagePicker();
 
-  static const int _totalSeconds = 300;
-  int _remainingSeconds = _totalSeconds;
+  static const int _normalTotalSeconds = 300;
+  static const int _demoTotalSeconds = 30;
+  int get _totalSeconds => TestModeService.isEnabled ? _demoTotalSeconds : _normalTotalSeconds;
+  int _remainingSeconds = _normalTotalSeconds;
   Timer? _countdownTimer;
 
   String? _declineReason;
@@ -72,6 +75,7 @@ class _ProviderNotificationScreenState
       CurvedAnimation(parent: _shakeController, curve: Curves.elasticOut),
     );
 
+    _remainingSeconds = _totalSeconds;
     _fetchPendingBooking();
   }
 
@@ -85,12 +89,26 @@ class _ProviderNotificationScreenState
             _isLoading = false;
           });
           _startCountdown();
+        } else if (TestModeService.isEnabled) {
+          // Demo mode: show mock booking even if no real booking exists
+          setState(() {
+            _realBooking = TestModeService.mockBooking;
+            _isLoading = false;
+          });
+          _startCountdown();
         } else {
           setState(() => _isLoading = false);
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (TestModeService.isEnabled && mounted) {
+        // Demo mode: ignore API errors, show mock booking
+        setState(() {
+          _realBooking = TestModeService.mockBooking;
+          _isLoading = false;
+        });
+        _startCountdown();
+      } else if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error fetching bookings: $e')));
@@ -126,6 +144,17 @@ class _ProviderNotificationScreenState
     _countdownTimer?.cancel();
     if (_realBooking == null) return;
     final bookingId = _realBooking!['id'] as String;
+
+    if (TestModeService.isEnabled) {
+      // Demo mode: skip API call, simulate accept immediately
+      setState(() => _phase = _Phase.accepted);
+      _successController.forward();
+      // Also update Firestore so customer BookingWaitingScreen advances
+      try {
+        await BookingFirestoreService.acceptBooking(bookingId);
+      } catch (_) {}
+      return;
+    }
 
     showDialog(
       context: context,
@@ -312,6 +341,29 @@ class _ProviderNotificationScreenState
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          if (TestModeService.isEnabled)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.science_rounded, size: 14, color: Colors.amber.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Judge Demo Mode — Mock booking shown. Timer: 30s. Tap Accept to simulate.',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.amber.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _buildCountdownCard(),
           const SizedBox(height: 14),
           _buildBookingCard(),
@@ -535,7 +587,7 @@ class _ProviderNotificationScreenState
                     _detailRow(Icons.build_outlined, 'Service', serviceType),
                     if (serviceDetails != null && serviceDetails.isNotEmpty) ...[
                       _divider(),
-                      _detailRow(Icons.description_outlined, 'Kaam', serviceDetails),
+                      _detailRow(Icons.description_outlined, 'Work', serviceDetails),
                     ],
                     _divider(),
                     _detailRow(
@@ -786,7 +838,7 @@ class _ProviderNotificationScreenState
                         borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: const Text('Wapas Jao',
+                  child: const Text('Go Back',
                       style: TextStyle(color: AppTheme.textGrey)),
                 ),
               ),
@@ -888,7 +940,7 @@ class _ProviderNotificationScreenState
                   _divider(),
                   _detailRow(
                     Icons.payments_outlined,
-                    'Aapki Kamai',
+                    'Your Earnings',
                     'Rs. ${(amount * 0.9).round()} (90%)',
                     valueColor: AppTheme.primary,
                     valueBold: true,
@@ -904,7 +956,7 @@ class _ProviderNotificationScreenState
                 icon: Icon(Icons.cancel_outlined,
                     color: Colors.red.shade600, size: 18),
                 label: Text(
-                  'Booking Cancel Karo',
+                  'Cancel Booking',
                   style: TextStyle(
                       color: Colors.red.shade600,
                       fontWeight: FontWeight.w700),
@@ -973,11 +1025,11 @@ class _ProviderNotificationScreenState
                 ),
                 const SizedBox(height: 8),
                 ...[
-                  'Cancellation rate +1 ho jaye ga',
-                  'Reliability score -10 ho jaye ga',
-                  'Risk level "High" ki taraf badhega',
-                  'Aapki ranking mein kaafi girawat aaye gi',
-                  '3 baar karne par platform se remove ho saktay hain',
+                  'Cancellation rate will increase by +1',
+                  'Reliability score will decrease by -10',
+                  'Risk level will move toward High',
+                  'Your ranking will drop significantly',
+                  '3 occurrences may result in platform removal',
                 ].map((t) => Padding(
                       padding: const EdgeInsets.only(bottom: 5),
                       child: Row(
@@ -1012,7 +1064,7 @@ class _ProviderNotificationScreenState
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Nahi, Rakho',
+                    'No, Keep It',
                     style: TextStyle(
                         color: Colors.white, fontWeight: FontWeight.w700),
                   ),
@@ -1029,7 +1081,7 @@ class _ProviderNotificationScreenState
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   child: Text(
-                    'Haan, Cancel',
+                    'Yes, Cancel',
                     style: TextStyle(
                         color: Colors.red.shade600,
                         fontWeight: FontWeight.w700),
@@ -1114,7 +1166,7 @@ class _ProviderNotificationScreenState
                   elevation: 0,
                 ),
                 child: const Text(
-                  'Home Jao',
+                  'Go Home',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1175,7 +1227,7 @@ class _ProviderNotificationScreenState
                   elevation: 0,
                 ),
                 child: const Text(
-                  'Home Jao',
+                  'Go Home',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1315,11 +1367,11 @@ class _ProviderNotificationScreenState
     switch (status) {
       case 'pending_provider_response':
         badgeColor = Colors.orange.shade700;
-        statusText = 'Aapka Jawab Chahiye';
+        statusText = 'Response Required';
         break;
       case 'pending_review':
         badgeColor = Colors.blue.shade700;
-        statusText = 'Review Mein Hai';
+        statusText = 'Under Review';
         break;
       case 'resolved':
         badgeColor = Colors.green.shade700;
@@ -1439,7 +1491,7 @@ class _ProviderNotificationScreenState
                           ),
                         )
                       : const Text(
-                          'Jawab Submit Karo',
+                          'Submit Response',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -1452,7 +1504,7 @@ class _ProviderNotificationScreenState
             if (status == 'pending_review') ...[
               const Divider(),
               const SizedBox(height: 8),
-              _detailRow(Icons.reply_outlined, 'Aapka Jawab:', ''),
+              _detailRow(Icons.reply_outlined, 'Your Response:', ''),
               Padding(
                 padding: const EdgeInsets.only(left: 24, top: 4),
                 child: Text(
@@ -1486,7 +1538,7 @@ class _ProviderNotificationScreenState
               const Divider(),
               const SizedBox(height: 8),
               if (providerResponse.isNotEmpty) ...[
-                _detailRow(Icons.reply_outlined, 'Aapka Jawab:', ''),
+                _detailRow(Icons.reply_outlined, 'Your Response:', ''),
                 Padding(
                   padding: const EdgeInsets.only(left: 24, top: 4, bottom: 8),
                   child: Text(
@@ -1495,7 +1547,7 @@ class _ProviderNotificationScreenState
                   ),
                 ),
               ],
-              _detailRow(Icons.gavel, 'Faisla (Resolution):', ''),
+              _detailRow(Icons.gavel, 'Resolution:', ''),
               Padding(
                 padding: const EdgeInsets.only(left: 24, top: 4, bottom: 8),
                 child: Text(
@@ -1560,7 +1612,7 @@ class _ProviderNotificationScreenState
             if (img != null) setState(() => _disputeEvidence[disputeId]!.add(img));
           },
           icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
-          label: const Text('Photo Add Karein', style: TextStyle(fontSize: 12)),
+          label: const Text('Add Photo', style: TextStyle(fontSize: 12)),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppTheme.primary,
             side: const BorderSide(color: AppTheme.primary),

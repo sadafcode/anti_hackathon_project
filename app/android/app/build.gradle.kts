@@ -5,6 +5,32 @@ val localProps = Properties().also { props ->
     if (f.exists()) props.load(f.inputStream())
 }
 
+// Read .env from project root (two levels up from android/)
+val envProps = Properties().also { props ->
+    val envFile = rootProject.projectDir.parentFile.parentFile.resolve(".env")
+    if (envFile.exists()) {
+        envFile.forEachLine { line ->
+            val trimmed = line.trim()
+            if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
+                val idx = trimmed.indexOf('=')
+                if (idx > 0) {
+                    val key = trimmed.substring(0, idx).trim()
+                    val value = trimmed.substring(idx + 1).trim().removeSurrounding("\"")
+                    props.setProperty(key, value)
+                }
+            }
+        }
+    }
+}
+
+fun getKey(vararg keys: String): String {
+    for (k in keys) {
+        val v = localProps.getProperty(k) ?: envProps.getProperty(k)
+        if (!v.isNullOrEmpty()) return v
+    }
+    return ""
+}
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -38,7 +64,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")
+        manifestPlaceholders["MAPS_API_KEY"] = getKey("MAPS_API_KEY", "GOOGLE_MAPS_API_KEY")
     }
 
     buildTypes {

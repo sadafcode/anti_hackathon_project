@@ -309,26 +309,74 @@ Manages the service quality loop after job completion.
 
 ---
 
-### Agent 7 — Dispute Agent
-**File:** `backend/src/agents/dispute.agent.ts`
+### Agent 7 — Dispute & Resolution System
+**Files:** `backend/src/agents/dispute-report.agent.ts` · `backend/src/agents/dispute.agent.ts`
 
-Handles all required dispute and escalation types with automatic resolution logic.
+The dispute system uses a **two-agent + human-in-the-loop** design. The AI does not make final decisions unilaterally — it prepares a neutral analysis and the human team makes the final call.
 
-| Dispute Type | Resolution |
-|---|---|
-| **No-show** | 100% refund + 1 strike on provider |
-| **Quality complaint** | 20% partial refund + ranking penalty |
-| **Price disagreement** | Exact overcharge refunded + formal warning |
-| **Overrun** | Customer approval required before charging extra |
-| **Cancellation (user)** | Full refund if 2h+ before; 10% fee if < 2h |
-| **Compensation** | Provider caused damage → calculated payout from platform |
-| **Blacklist** | 3 strikes → permanent removal from platform |
-| **Human escalation** | Unresolved cases → support ticket → 24h SLA |
+**Full dispute flow:**
 
-- All events logged with timestamps in Firestore
-- `apply_provider_strike` tool updates strike count and triggers removal at 3
-- `apply_provider_penalty` tool reduces reliability score and ranking
-- Refund amounts calculated by policy — no manual intervention needed
+```
+Customer submits complaint (+ evidence photos)
+            │
+            ▼
+  POST /dispute/analyze
+            │
+            ▼
+┌─────────────────────────────────────────┐
+│       Dispute Report Agent              │
+│  (dispute-report.agent.ts)              │
+│                                         │
+│  Reads: user_complaint                  │
+│         provider_response               │
+│         evidence_photos[]               │
+│         original_price                  │
+│                                         │
+│  Produces neutral structured report:    │
+│  - Summary of dispute                   │
+│  - Client's perspective (objective)     │
+│  - Provider's perspective (objective)   │
+│  - Evidence photo analysis              │
+│  - Key discrepancies (fact clashes)     │
+│  - Severity: low / medium / high        │
+│  - Recommended action for team          │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+  Firestore: disputes/{id}
+  status = "pending_team_decision"
+  ai_report = { full report }
+               │
+               ▼
+  Email sent to team (nodemailer / Gmail)
+  Subject: "[Dispute] {id} — AI Report Tayyar"
+  Body: All report sections in formatted HTML
+               │
+               ▼
+  Human team reviews → makes final decision
+```
+
+**What the Dispute Report Agent does NOT do:**
+- Does not apply strikes or penalties directly
+- Does not issue refunds unilaterally
+- Does not take sides — presents both parties' claims objectively
+
+**Dispute types supported:**
+
+| Type | What the AI reports | Severity typical |
+|---|---|---|
+| **No-show** | Provider did not arrive — full refund recommended | High |
+| **Quality complaint** | Work done but substandard — partial refund recommended (20%, or lower if provider defense is valid) | Medium |
+| **Price disagreement** | Provider charged more than quoted — overcharge amount noted | Medium |
+| **Overrun** | Job took longer — extra charge requires customer approval first | Low–Medium |
+| **Cancellation** | Customer cancelled — full refund if 2h+ before job, 10% fee if < 2h | Low |
+
+**Blacklist logic** (in `dispute.agent.ts`): When the team applies a strike via `apply_provider_strike`, the tool checks the total count. At 3 strikes → provider is permanently removed from the platform.
+
+- `apply_provider_strike` — increments strike count in Firestore, returns `strikes_after`; if ≥ 3, status = `blacklisted`
+- `apply_provider_penalty` — reduces `reliability_score` and ranking weight for quality complaints
+- All dispute records saved in Firestore `disputes` collection with timestamps
+- Evidence photos accepted as URLs (uploaded via Firebase Storage from the dispute screen)
 
 ---
 

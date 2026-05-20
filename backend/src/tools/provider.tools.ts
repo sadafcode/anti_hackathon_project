@@ -4,10 +4,25 @@ import fs from 'fs';
 import path from 'path';
 
 const DATA_PATH = path.resolve(__dirname, '../../data/providers.json');
+// Cloud Run containers have read-only image filesystem — writes go to /tmp
+const TMP_PATH = '/tmp/providers.json';
+
+function getWritablePath(): string {
+  // On Cloud Run the image filesystem is read-only; /tmp is always writable
+  try {
+    fs.accessSync(path.dirname(DATA_PATH), fs.constants.W_OK);
+    return DATA_PATH;
+  } catch {
+    return TMP_PATH;
+  }
+}
 
 function readProviders(): any[] {
+  // Prefer /tmp copy (has runtime registrations) over bundled file
+  const tmpExists = fs.existsSync(TMP_PATH);
+  const src = tmpExists ? TMP_PATH : DATA_PATH;
   try {
-    const raw = fs.readFileSync(DATA_PATH, 'utf-8').replace(/^﻿/, '');
+    const raw = fs.readFileSync(src, 'utf-8').replace(/^﻿/, '');
     return JSON.parse(raw);
   } catch {
     return [];
@@ -15,7 +30,8 @@ function readProviders(): any[] {
 }
 
 function writeProviders(providers: any[]): void {
-  fs.writeFileSync(DATA_PATH, JSON.stringify(providers, null, 2));
+  const dest = getWritablePath();
+  fs.writeFileSync(dest, JSON.stringify(providers, null, 2));
 }
 
 const CITY_AREAS: Record<string, string[]> = {
@@ -101,8 +117,30 @@ export const searchProviders = tool({
   execute: async ({ service_type, area, urgency, budget_sensitive, job_complexity, customer_lat, customer_lng }) => {
     const providers = readProviders();
 
+    // Normalize AI-generated service types to stored canonical values
+    const normalizeServiceType = (st: string): string => {
+      const t = st.toLowerCase().replace(/[\s-]/g, '_');
+      if (t.includes('tutor') || t.includes('teacher') || t.includes('coaching')) return 'tutor';
+      if (t.includes('ac_repair') || t.includes('ac repair')) return 'ac_repair';
+      if (t.includes('ac_install') || t.includes('ac install')) return 'ac_installation';
+      if (t.includes('ac_serv') || t.includes('ac serv')) return 'ac_servicing';
+      if (t.includes('plumb')) return 'plumber';
+      if (t.includes('electric')) return 'electrician';
+      if (t.includes('carpent') || t.includes('woodwork')) return 'carpenter';
+      if (t.includes('mechanic') || t.includes('auto')) return 'mechanic';
+      if (t.includes('beautician') || t.includes('makeup') || t.includes('beauty')) return 'beautician';
+      if (t.includes('driver') || t.includes('transport')) return 'driver';
+      if (t.includes('paint')) return 'painter';
+      if (t.includes('clean')) return 'cleaning';
+      return t;
+    };
+
+    const normalizedType = normalizeServiceType(service_type);
+
     const byService = providers.filter((p: any) =>
-      (p.service_types || []).some((s: string) => s.toLowerCase() === service_type.toLowerCase())
+      (p.service_types || []).some((s: string) =>
+        s.toLowerCase() === normalizedType || s.toLowerCase() === service_type.toLowerCase()
+      )
     );
 
     if (byService.length === 0) {

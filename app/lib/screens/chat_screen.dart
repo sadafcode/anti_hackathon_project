@@ -11,6 +11,7 @@ import 'map_picker_screen.dart';
 import 'agent_trace_screen.dart';
 import 'baseline_comparison_screen.dart';
 import '../services/api_service.dart';
+import '../services/test_mode_service.dart';
 import '../utils/location_helper.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -449,7 +450,68 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+          if (TestModeService.isEnabled) _buildQuickQueryBar(),
           _buildInputBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickQueryBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      color: Colors.amber.shade50,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 4),
+            child: Row(
+              children: [
+                Icon(Icons.science_rounded, size: 12, color: Colors.amber.shade800),
+                const SizedBox(width: 4),
+                Text(
+                  'Judge Demo — Tap to auto-send:',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: TestModeService.quickQueries.map((q) {
+              return GestureDetector(
+                onTap: () {
+                  _inputController.text = q['text']!;
+                  Future.delayed(const Duration(milliseconds: 200), () {
+                    _sendMessage();
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade600,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.shade700),
+                  ),
+                  child: Text(
+                    q['label']!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );
