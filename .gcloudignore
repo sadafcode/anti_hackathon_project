@@ -1,0 +1,12 @@
+.gcloudignore
+.git
+.gitignore
+node_modules/
+dist/
+app/
+antigravity_artifact/
+antigravity_traces/
+design/
+images for readmefile/
+*.pdf
+serviceAccountKey.json

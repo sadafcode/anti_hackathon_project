@@ -87,8 +87,8 @@ function detectMessageLanguage(text: string): 'english' | 'roman_urdu' | 'urdu' 
   // Check for Arabic/Urdu Unicode block (U+0600–U+06FF)
   const hasUrduScript = /[؀-ۿ]/.test(text);
 
-  // Roman Urdu grammar/function words — these only appear in Urdu, not English (removed 'the' to prevent English overlap)
-  const romanUrduGrammar = /\b(mujhe|mujhy|mujhey|chahiye|chahiyay|chahte|hain|hun|hoon|tha|thi|thay|kyun|kyunke|kahan|kab|kaise|aur|ya|bhi|sirf|abhi|kal|parso|subah|sham|dopahar|raat|phir|lekin|agar|jab|jahan|woh|yeh|inhe|unhe|mera|meri|apna|apni|bilkul|zaroor|shukriya|meherbani|achha|acha|theek|nahi|nahin|ko|se|ne|ka|ki|ke)\b/i;
+  // Roman Urdu grammar/function words — these only appear in Urdu, not English
+  const romanUrduGrammar = /\b(mujhe|mujhy|mujhey|chahiye|chahiyay|chahte|hain|hun|hoon|tha|thi|thay|kyun|kyunke|kahan|kab|kaise|aur|ya|bhi|sirf|abhi|kal|parso|subah|sham|dopahar|raat|phir|lekin|agar|jab|jahan|woh|yeh|inhe|unhe|mera|meri|apna|apni|bilkul|zaroor|shukriya|meherbani|achha|acha|theek|nahi|nahin|ko|se|ne|ka|ki|ke|batadiya|bataya|batao|bata|pori|poori|sara|sari|karo|karna|karta|karti|karte|gaya|gayi|aya|ayi|aao|jao|lena|lelo|dena|dedo|hogaya|hojao|hojaega|samajh|samjho|dekho|dekhna|suno|sun|pata|maloom|zaroor|theek|bilkul|acha|haan|han|nahi|nahin|milta|milti|lagta|lagti|rakho|rakh|dono|dono|saath|saath|abhi|foran|jaldi|dair|baaqi|upar|neeche|andar|bahar|pehle|baad|phir|dobara|zyada|kam|alag|wahi|yahi|koi|kuch|sab|har|sirf|bas)\b/i;
   const hasRomanUrdu = romanUrduGrammar.test(text);
 
   // English-only function words (not used in Roman Urdu)
@@ -1302,6 +1302,23 @@ const DAY_NORMALIZE: Record<string, string> = {
   'thursday': 'thursday', 'friday': 'friday', 'saturday': 'saturday', 'sunday': 'sunday',
 };
 
+function normalizeServiceType(s: string): string {
+  const t = s.toLowerCase().replace(/[\s-]/g, '_');
+  if (t.includes('tutor') || t.includes('teacher') || t.includes('coaching')) return 'tutor';
+  if (t.includes('ac_install')) return 'ac_installation';
+  if (t.includes('ac_serv')) return 'ac_servicing';
+  if (t.includes('ac') || t.includes('air_cond')) return 'ac_repair';
+  if (t.includes('plumb')) return 'plumber';
+  if (t.includes('electric')) return 'electrician';
+  if (t.includes('carpent') || t.includes('woodwork')) return 'carpenter';
+  if (t.includes('mechanic') || t.includes('auto')) return 'mechanic';
+  if (t.includes('beautician') || t.includes('makeup') || t.includes('beauty')) return 'beautician';
+  if (t.includes('driver') || t.includes('transport')) return 'driver';
+  if (t.includes('paint')) return 'painter';
+  if (t.includes('clean')) return 'cleaning';
+  return t;
+}
+
 function normalizeAvailability(avail: Record<string, string[]> | null): Record<string, string[]> {
   if (!avail) return {
     monday: ['available'], tuesday: ['available'], wednesday: ['available'],
@@ -1320,6 +1337,11 @@ router.post('/provider/register', async (req, res) => {
   try {
     const { name, service_types, area, hourly_rate, rate_basic, rate_intermediate, rate_complex, experience_years, nic, availability } = req.body;
 
+    // Normalize service type strings to canonical IDs (e.g. 'AC Tech' → 'ac_repair')
+    const normalizedServiceTypes = Array.isArray(service_types)
+      ? service_types.map((s: string) => normalizeServiceType(s))
+      : [];
+
     let blue_tick = false;
     let nadra_status = 'no_nic';
     if (nic) {
@@ -1334,7 +1356,7 @@ router.post('/provider/register', async (req, res) => {
 
     const newProvider = {
       id: 'PRV-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-      name, area, service_types, hourly_rate,
+      name, area, service_types: normalizedServiceTypes, hourly_rate,
       rate_basic: rate_basic || hourly_rate,
       rate_intermediate: rate_intermediate || hourly_rate * 1.4,
       rate_complex: rate_complex || hourly_rate * 2.0,
@@ -1347,9 +1369,18 @@ router.post('/provider/register', async (req, res) => {
     };
 
     const dataPath = path.resolve(__dirname, '../../data/providers.json');
-    const providers = JSON.parse(fs.readFileSync(dataPath, 'utf-8').replace(/^﻿/, ''));
+    const tmpPath = '/tmp/providers.json';
+    // Use /tmp copy if it exists (has runtime registrations); fall back to bundled file
+    const readPath = fs.existsSync(tmpPath) ? tmpPath : dataPath;
+    let providers: any[] = [];
+    if (fs.existsSync(readPath)) {
+      providers = JSON.parse(fs.readFileSync(readPath, 'utf-8').replace(/^﻿/, ''));
+    }
     providers.push(newProvider);
-    fs.writeFileSync(dataPath, JSON.stringify(providers, null, 2));
+    // Write to /tmp (writable on Cloud Run) or original path if writable
+    let writePath = tmpPath;
+    try { fs.accessSync(path.dirname(dataPath), fs.constants.W_OK); writePath = dataPath; } catch { /* Cloud Run: use /tmp */ }
+    fs.writeFileSync(writePath, JSON.stringify(providers, null, 2));
 
     const messages: Record<string, string> = {
       mock_verified: `NIC verified! Blue tick mil gaya.`,
@@ -1539,7 +1570,11 @@ router.post('/providers/:id/rate', async (req, res) => {
     }
 
     const dataPath = path.resolve(__dirname, '../../data/providers.json');
-    const providers = JSON.parse(fs.readFileSync(dataPath, 'utf-8').replace(/^﻿/, ''));
+    const tmpPath2 = '/tmp/providers.json';
+    const readSrc = fs.existsSync(tmpPath2) ? tmpPath2 : dataPath;
+    const providers = fs.existsSync(readSrc)
+      ? JSON.parse(fs.readFileSync(readSrc, 'utf-8').replace(/^﻿/, ''))
+      : [];
     const idx = providers.findIndex((p: any) => p.id === providerId);
     if (idx === -1) return res.status(404).json({ error: 'Provider not found' });
 
