@@ -1,12 +1,15 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../models/provider_model.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/test_mode_service.dart';
 
 class DisputeScreen extends StatefulWidget {
   final ProviderModel? provider;
@@ -63,12 +66,51 @@ class _DisputeScreenState extends State<DisputeScreen>
   Future<void> _loadBookingCard(String bookingId) async {
     if (bookingId.isEmpty) return;
     setState(() { _loadingBooking = true; _bookingData = null; });
+
+    // Demo mode: return mock booking card immediately
+    if (TestModeService.isEnabled && bookingId == TestModeService.mockDisputeBookingId) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (mounted) {
+        setState(() {
+          _bookingData = {
+            'providerName': 'Ali Hassan',
+            'serviceType': 'AC Repair',
+            'amount': 1498,
+            'status': 'Completed',
+            'fullAddress': 'House 42, Street 5, G-13/2, Islamabad',
+            'datetime': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
+          };
+          _loadingBooking = false;
+        });
+      }
+      return;
+    }
+
     try {
-      final doc = await FirebaseFirestore.instance.collection('bookings').doc(bookingId).get();
-      if (doc.exists && mounted) {
-        setState(() { _bookingData = doc.data(); _loadingBooking = false; });
-      } else if (mounted) {
-        setState(() => _loadingBooking = false);
+      final baseUrl = kIsWeb ? 'http://localhost:3000' : 'https://khidmatbot-backend-251161399989.us-central1.run.app';
+      final resp = await http.get(Uri.parse('$baseUrl/api/booking/$bookingId'));
+      if (resp.statusCode == 200 && mounted) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final booking = data['booking'] as Map<String, dynamic>;
+        setState(() {
+          _bookingData = {
+            'providerName': booking['provider_id'] ?? 'Provider',
+            'serviceType': booking['service_type'] ?? 'Service',
+            'amount': booking['total_price'] ?? 0,
+            'status': booking['status'] ?? 'pending',
+            'fullAddress': booking['intent']?['location'] ?? '',
+            'datetime': booking['datetime'] ?? '',
+          };
+          _loadingBooking = false;
+        });
+      } else {
+        // Fallback: try Firestore
+        final doc = await FirebaseFirestore.instance.collection('bookings').doc(bookingId).get();
+        if (doc.exists && mounted) {
+          setState(() { _bookingData = doc.data(); _loadingBooking = false; });
+        } else if (mounted) {
+          setState(() => _loadingBooking = false);
+        }
       }
     } catch (_) {
       if (mounted) setState(() => _loadingBooking = false);
@@ -144,11 +186,11 @@ class _DisputeScreenState extends State<DisputeScreen>
 
     // Ya Booking ID ho ya Screenshot — dono mein se koi ek zaroor
     if (bookingId.isEmpty && _screenshots.isEmpty) {
-      _snack('Booking ID ya kam az kam ek screenshot zaroor dein');
+      _snack('Booking ID or at least one screenshot is required');
       return;
     }
     if (comment.isEmpty) {
-      _snack('Masle ka zikar karein comment mein');
+      _snack('Describe the issue in the comments');
       return;
     }
     setState(() => _isSubmitting = true);
@@ -309,10 +351,10 @@ class _DisputeScreenState extends State<DisputeScreen>
   Widget _buildTimeline() {
     final steps = [
       ('Dispute Filed', 'Your complaint has been registered', true),
-      ('Provider Notified', 'Provider ko notification mili', true),
+      ('Provider Notified', 'Provider has been notified', true),
       ('Provider Response', 'They will submit a response and evidence', false),
-      ('AI Report', 'Antigravity AI dono sides analyze karega', false),
-      ('Team Decision', 'Hamari team final faisla karegi', false),
+      ('AI Report', 'Antigravity AI will analyze both sides', false),
+      ('Team Decision', 'Our team will make the final decision', false),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,6 +418,53 @@ class _DisputeScreenState extends State<DisputeScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Demo mode: fill data button
+          if (TestModeService.isEnabled)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.science_rounded, size: 14, color: Colors.amber.shade800),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Judge Demo Mode',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.amber.shade900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        _bookingIdCtrl.text = TestModeService.mockDisputeBookingId;
+                        _commentCtrl.text = TestModeService.mockDisputeDescription;
+                        _loadBookingCard(TestModeService.mockDisputeBookingId);
+                      },
+                      icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                      label: const Text('Fill Demo Data', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Info banner
           Container(
             padding: const EdgeInsets.all(12),
@@ -558,7 +647,7 @@ class _DisputeScreenState extends State<DisputeScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Label(text: 'Screenshot ya Evidence (Optional)'),
+          const _Label(text: 'Screenshot or Evidence (Optional)'),
           const SizedBox(height: 10),
           if (_screenshots.isNotEmpty) ...[
             SizedBox(

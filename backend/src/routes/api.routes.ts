@@ -1616,6 +1616,17 @@ router.get('/providers/:id/booked-slots', (req, res) => {
   }
 });
 
+// ─── 15B. GET BOOKING BY ID ──────────────────────────────────────────────────
+router.get('/booking/:id', (req, res) => {
+  try {
+    const result = bookingStore.findById(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Booking nahi mili' });
+    res.json({ booking: result.booking, provider_id: result.provider_id });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── 15. TEST FCM NOTIFICATION ───────────────────────────────────────────────
 router.post('/fcm/test', async (req, res) => {
   try {
