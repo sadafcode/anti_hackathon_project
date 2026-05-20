@@ -50,6 +50,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         );
       });
       _reverseGeocode(loc);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GPS access nahi mila. Upar ilaka type karein ya map drag karein.'),
+          duration: Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -330,6 +338,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             onCameraMove: _onCameraMove,
             onCameraIdle: _onCameraIdle,
             markers: _markers,
+            myLocationEnabled: true,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapType: MapType.normal,

@@ -169,7 +169,10 @@ export const searchProviders = tool({
             const inCity = providersWithDistance.filter((p: any) => resolveCity(p.area) === city);
             available = inCity.filter(isAvailable);
             nearbyCount = inCity.length;
-          } else {
+          }
+          // Global fallback: if city search (or unknown city) returns 0, return ALL available providers
+          if (available.length === 0) {
+            radiusUsed = 'global';
             available = providersWithDistance.filter(isAvailable);
             nearbyCount = providersWithDistance.length;
           }
